@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import ContentCard from "@/components/ContentCard";
 import ReportDialog from "@/components/ReportDialog";
 import PaginationControls from "@/components/PaginationControls";
+import { UserBlockButton } from "@/components/UserBlockButton";
 
 const PublicProfile = () => {
   const { id } = useParams();
@@ -196,6 +197,7 @@ const PublicProfile = () => {
                     {isFollowing ? "Following" : "Follow"}
                   </Button>
                 )}
+                <UserBlockButton userId={id} userName={profile.display_name || profile.username || "User"} />
                 <ReportDialog reportedUserId={id} variant="outline" />
               </div>
             )}

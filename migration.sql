@@ -717,6 +717,217 @@ ADD COLUMN show_favorites BOOLEAN DEFAULT true;
 -- Criar índice para melhor performance
 CREATE INDEX IF NOT EXISTS idx_profiles_show_favorites ON profiles(show_favorites);
 
+-- ── Content Rating Enum ───────────────────────────────────────
+DO $$
+BEGIN
+  CREATE TYPE content_rating AS ENUM (
+    'safe',
+    'suggestive',
+    'mature',
+    'explicit'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+-- ── Alter stories table ────────────────────────────────────────
+ALTER TABLE IF EXISTS public.stories
+ADD COLUMN IF NOT EXISTS content_rating content_rating NOT NULL DEFAULT 'safe',
+ADD COLUMN IF NOT EXISTS average_rating numeric(3, 2) DEFAULT 0;
+
+-- ── Update comments table for threading ────────────────────────
+ALTER TABLE IF EXISTS public.comments
+ADD COLUMN IF NOT EXISTS parent_comment_id uuid REFERENCES public.comments(id) ON DELETE CASCADE,
+ADD COLUMN IF NOT EXISTS is_approved boolean DEFAULT false;
+
+-- ── User blocks table ──────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.user_blocks (
+  id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  blocker_id uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  blocked_id uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  reason     text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (blocker_id, blocked_id),
+  CHECK (blocker_id != blocked_id)
+);
+
+-- ── Reviews table (separate from ratings) ──────────────────────
+CREATE TABLE IF NOT EXISTS public.reviews (
+  id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  story_id   uuid        NOT NULL REFERENCES public.stories(id) ON DELETE CASCADE,
+  user_id    uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title      text        NOT NULL,
+  content    text        NOT NULL,
+  rating     integer     CHECK (rating BETWEEN 1 AND 5),
+  helpful_count integer DEFAULT 0,
+  is_approved boolean DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, story_id)
+);
+
+-- ── 2FA Secrets table ──────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.user_2fa_secrets (
+  id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    uuid        NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
+  secret     text        NOT NULL,
+  is_enabled boolean     DEFAULT false,
+  backup_codes text[]    NOT NULL DEFAULT '{}',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── Session tracking ──────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.user_sessions (
+  id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  last_activity timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL,
+  ip_address text,
+  user_agent text,
+  is_active  boolean     DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- ── Add updated_at trigger to new tables ───────────────────────
+DO $$
+DECLARE
+  t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['reviews','user_2fa_secrets','user_sessions'] LOOP
+    EXECUTE format('
+      DROP TRIGGER IF EXISTS set_updated_at ON public.%I;
+      CREATE TRIGGER set_updated_at
+        BEFORE UPDATE ON public.%I
+        FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+    ', t, t);
+  END LOOP;
+END $$;
+
+-- ── RLS for user_blocks ────────────────────────────────────────
+ALTER TABLE public.user_blocks ENABLE ROW LEVEL SECURITY;
+
+-- (Opcional: deixar explícito TO authenticated/anon. Mantive seu comportamento atual.)
+DROP POLICY IF EXISTS "Users can see their own blocks" ON public.user_blocks;
+CREATE POLICY "Users can see their own blocks"
+ON public.user_blocks FOR SELECT
+USING (blocker_id = auth.uid() OR blocked_id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can create blocks" ON public.user_blocks;
+CREATE POLICY "Users can create blocks"
+ON public.user_blocks FOR INSERT
+WITH CHECK (blocker_id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can delete their own blocks" ON public.user_blocks;
+CREATE POLICY "Users can delete their own blocks"
+ON public.user_blocks FOR DELETE
+USING (blocker_id = auth.uid());
+
+-- ── RLS for reviews ────────────────────────────────────────────
+ALTER TABLE public.reviews ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Anyone can read approved reviews" ON public.reviews;
+CREATE POLICY "Anyone can read approved reviews"
+ON public.reviews FOR SELECT
+USING (is_approved = true OR user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can create reviews" ON public.reviews;
+CREATE POLICY "Users can create reviews"
+ON public.reviews FOR INSERT
+WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can update own reviews" ON public.reviews;
+CREATE POLICY "Users can update own reviews"
+ON public.reviews FOR UPDATE
+USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can delete own reviews" ON public.reviews;
+CREATE POLICY "Users can delete own reviews"
+ON public.reviews FOR DELETE
+USING (user_id = auth.uid());
+
+-- ── RLS for 2FA secrets ────────────────────────────────────────
+ALTER TABLE public.user_2fa_secrets ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can see own 2fa secrets" ON public.user_2fa_secrets;
+CREATE POLICY "Users can see own 2fa secrets"
+ON public.user_2fa_secrets FOR SELECT
+USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can insert own 2fa" ON public.user_2fa_secrets;
+CREATE POLICY "Users can insert own 2fa"
+ON public.user_2fa_secrets FOR INSERT
+WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can update own 2fa" ON public.user_2fa_secrets;
+CREATE POLICY "Users can update own 2fa"
+ON public.user_2fa_secrets FOR UPDATE
+USING (user_id = auth.uid());
+
+-- ── RLS for sessions ────────────────────────────────────────────
+ALTER TABLE public.user_sessions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users see their own sessions" ON public.user_sessions;
+CREATE POLICY "Users see their own sessions"
+ON public.user_sessions FOR SELECT
+USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can create sessions" ON public.user_sessions;
+CREATE POLICY "Users can create sessions"
+ON public.user_sessions FOR INSERT
+WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can update their sessions" ON public.user_sessions;
+CREATE POLICY "Users can update their sessions"
+ON public.user_sessions FOR UPDATE
+USING (user_id = auth.uid());
+
+-- ── Enhance existing RLS ────────────────────────────────────────
+ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
+
+-- ✅ Corrigido: trocado CREATE POLICY IF NOT EXISTS por DROP + CREATE
+
+DROP POLICY IF EXISTS "Comments readable if not blocked by author" ON public.comments;
+CREATE POLICY "Comments readable if not blocked by author"
+ON public.comments FOR SELECT
+USING (
+  NOT EXISTS (
+    SELECT 1 FROM public.user_blocks
+    WHERE (blocker_id = comments.user_id AND blocked_id = auth.uid())
+       OR (blocker_id = auth.uid() AND blocked_id = comments.user_id)
+  )
+);
+
+DROP POLICY IF EXISTS "Users can insert their own comments" ON public.comments;
+CREATE POLICY "Users can insert their own comments"
+ON public.comments FOR INSERT
+WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can update own comments" ON public.comments;
+CREATE POLICY "Users can update own comments"
+ON public.comments FOR UPDATE
+USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can delete own comments" ON public.comments;
+CREATE POLICY "Users can delete own comments"
+ON public.comments FOR DELETE
+USING (user_id = auth.uid());
+
+-- ── View for average story ratings ────────────────────────────
+CREATE OR REPLACE VIEW public.story_ratings_summary AS
+SELECT
+  story_id,
+  COUNT(*) as rating_count,
+  ROUND(AVG(rating)::numeric, 2) as average_rating,
+  MAX(rating) as max_rating,
+  MIN(rating) as min_rating
+FROM public.ratings
+GROUP BY story_id;
+
+-- ── Cleanup old comment policies if needed ─────────────────────
+DROP POLICY IF EXISTS "Comments readable to all" ON public.comments;
+DROP POLICY IF EXISTS "Admins can delete any comment" ON public.comments;
+
 -- ── Done ──────────────────────────────────────────────────────────────────────
 -- Insert your first admin after running:
 --

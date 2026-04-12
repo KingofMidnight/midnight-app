@@ -2,13 +2,25 @@
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Link, Navigate } from "react-router-dom";
-import { User, BookOpen, Star, CheckCircle, Bookmark, Settings, Eye, EyeOff, Camera } from "lucide-react";
+import { User, BookOpen, Star, CheckCircle, Bookmark, Settings, Eye, EyeOff, Camera, Shield, Archive, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import ContentCard from "@/components/ContentCard";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import type { Profile, Story, UserListWithStory, ListType } from "@/types/domain";
 
 type ListsMap = Record<ListType, Story[]>;
@@ -21,13 +33,15 @@ interface Stats {
 }
 
 const Profile = () => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isCreator, refreshUser } = useAuth();
   const { toast } = useToast();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [lists, setLists] = useState<ListsMap>({ reading: [], completed: [], plan_to_read: [] });
   const [stats, setStats] = useState<Stats>({ reading: 0, completed: 0, plan_to_read: 0, ratings: 0 });
   const [hiddenStoryIds, setHiddenStoryIds] = useState<Set<string>>(new Set());
   const [createdStories, setCreatedStories] = useState<Story[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [userRoles, setUserRoles] = useState<string[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -59,6 +73,18 @@ const Profile = () => {
       }
     };
     load();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const loadRoles = async () => {
+      const { data } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id);
+      setUserRoles(data?.map(r => r.role) || []);
+    };
+    loadRoles();
   }, [user]);
 
   if (authLoading) return <div className="min-h-screen flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
@@ -100,6 +126,58 @@ const Profile = () => {
     await supabase.from("profiles").update({ avatar_url: avatarUrl }).eq("id", user.id);
     setProfile((prev) => prev ? { ...prev, avatar_url: avatarUrl } : prev);
     toast({ title: "Avatar updated" });
+  };
+
+  const handleRoleToggle = async () => {
+    if (!user) return;
+    setLoading(true);
+
+    try {
+      if (isCreator) {
+        // Remove creator role and archive all works
+        await supabase.from("user_roles").delete().eq("user_id", user.id).eq("role", "creator");
+
+        // Archive all user stories
+        const { data: stories } = await supabase
+          .from("stories")
+          .select("id")
+          .eq("created_by", user.id)
+          .eq("review_status", "approved");
+
+        if (stories && stories.length > 0) {
+          await supabase
+            .from("stories")
+            .update({ review_status: "archived" })
+            .in("id", stories.map(s => s.id));
+        }
+
+        toast({
+          title: "Account changed",
+          description: "You are no longer a creator. All your works have been archived.",
+        });
+      } else {
+        // Add creator role
+        await supabase.from("user_roles").insert({
+          user_id: user.id,
+          role: "creator"
+        });
+
+        toast({
+          title: "Account changed",
+          description: "You are now a creator! You can publish your stories.",
+        });
+      }
+
+      await refreshUser();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Unable to change account type.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const statItems = [
@@ -162,20 +240,23 @@ const Profile = () => {
 
       <div className="container py-8">
         <Tabs defaultValue="reading">
-          <TabsList className="bg-secondary border border-border">
+          <TabsList className="bg-secondary border border-border w-full justify-center sm:justify-start overflow-x-auto overflow-y-hidden">
             {listKeys.map((key) => {
               const Icon = listIcons[key];
               return (
-                <TabsTrigger key={key} value={key} className="gap-1.5 data-[state=active]:bg-card">
-                  <Icon className="h-3.5 w-3.5" /> {listLabels[key]}
+                <TabsTrigger key={key} value={key} className="gap-1.5 data-[state=active]:bg-card flex-shrink-0">
+                  <Icon className="h-5 w-5 sm:h-3.5 sm:w-3.5" />
+                  <span className="hidden sm:inline">{listLabels[key]}</span>
                 </TabsTrigger>
               );
             })}
-            <TabsTrigger value="created" className="gap-1.5 data-[state=active]:bg-card">
-              <Star className="h-3.5 w-3.5" /> My Stories
+            <TabsTrigger value="created" className="gap-1.5 data-[state=active]:bg-card flex-shrink-0">
+              <Star className="h-5 w-5 sm:h-3.5 sm:w-3.5" />
+              <span className="hidden sm:inline">My Stories</span>
             </TabsTrigger>
-            <TabsTrigger value="settings" className="gap-1.5 data-[state=active]:bg-card">
-              <Settings className="h-3.5 w-3.5" /> Privacy
+            <TabsTrigger value="settings" className="gap-1.5 data-[state=active]:bg-card flex-shrink-0">
+              <Settings className="h-5 w-5 sm:h-3.5 sm:w-3.5" />
+              <span className="hidden sm:inline">Settings</span>
             </TabsTrigger>
           </TabsList>
 
@@ -234,32 +315,147 @@ const Profile = () => {
           </TabsContent>
 
           <TabsContent value="settings" className="mt-6">
-            <div className="max-w-md space-y-6">
-              <h3 className="text-lg font-bold">Public Profile Privacy</h3>
-              <div className="space-y-4">
-                {(["show_lists", "show_created_content"] as const).map((field) => (
-                  <div key={field} className="flex items-center justify-between p-4 rounded-lg bg-card border border-border">
-                    <div className="flex items-center gap-3">
-                      {profile?.[field]
-                        ? <Eye className="h-5 w-5 text-primary" />
-                        : <EyeOff className="h-5 w-5 text-muted-foreground" />}
-                      <div>
-                        <p className="font-medium text-sm">
-                          {field === "show_lists" ? "Show Reading Lists" : "Show Created Content"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {field === "show_lists"
-                            ? "Let others see your reading, completed, and planned lists"
-                            : "Let others see stories you've published"}
-                        </p>
+            <div className="space-y-6">
+              <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
+                <div className="mb-4">
+                  <h2 className="flex items-center gap-2 text-lg sm:text-xl font-semibold">
+                    <User className="h-4 w-4 sm:h-5 sm:w-5" />
+                    Account Profile
+                  </h2>
+                  <p className="text-muted-foreground text-sm mt-1">
+                    Basic information about your account
+                  </p>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <User className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{user.user_metadata?.display_name || user.email}</p>
+                      <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {userRoles.map((role) => (
+                      <Badge key={role} variant={role === "creator" ? "default" : "secondary"} className="text-xs">
+                        {role === "creator" ? "Creator" : role === "admin" ? "Administrator" : role}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
+                <div className="mb-4">
+                  <h2 className="flex items-center gap-2 text-lg sm:text-xl font-semibold">
+                    <Shield className="h-4 w-4 sm:h-5 sm:w-5" />
+                    Account Type
+                  </h2>
+                  <p className="text-muted-foreground text-sm mt-1">
+                    Switch between normal account and creator account
+                  </p>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div className="flex-1">
+                      <p className="font-medium">
+                        {isCreator ? "Creator Account" : "Normal Account"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {isCreator
+                          ? "You can publish and manage your stories."
+                          : "Basic account for reading and interaction."
+                        }
+                      </p>
+                    </div>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" disabled={loading} className="w-full sm:w-auto">
+                          {isCreator ? "Switch to Normal Account" : "Become a Creator"}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle className="flex items-center gap-2">
+                            <AlertTriangle className="h-5 w-5 text-destructive" />
+                            {isCreator ? "Stop being a creator?" : "Become a creator?"}
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            {isCreator ? (
+                              <>
+                                <strong>Warning:</strong> When you stop being a creator, all your published works will be automatically archived.
+                                You can only recover them manually by changing the status back to "published".
+                                <br /><br />
+                                Are you sure you want to continue?
+                              </>
+                            ) : (
+                              "By becoming a creator, you will be able to publish your own stories on the platform. Do you want to continue?"
+                            )}
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleRoleToggle} className={isCreator ? "bg-destructive hover:bg-destructive/90" : ""}>
+                            {isCreator ? "Archive works and continue" : "Become a creator"}
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+
+                  {isCreator && (
+                    <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <Archive className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5" />
+                        <div>
+                          <p className="font-medium text-amber-800 dark:text-amber-200">About archiving</p>
+                          <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                            If you stop being a creator, your works will be archived automatically.
+                            To publish them again, access your creator dashboard and manually change the status.
+                          </p>
+                        </div>
                       </div>
                     </div>
-                    <Switch
-                      checked={profile?.[field] ?? true}
-                      onCheckedChange={(v) => togglePrivacy(field, v)}
-                    />
-                  </div>
-                ))}
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
+                <div className="mb-4">
+                  <h3 className="text-base sm:text-lg font-semibold">Public Profile Privacy</h3>
+                  <p className="text-muted-foreground text-sm mt-1">
+                    Control what other users can see on your profile
+                  </p>
+                </div>
+                <div className="space-y-4">
+                  {(["show_lists", "show_created_content"] as const).map((field) => (
+                    <div key={field} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-lg bg-secondary/50 border border-border">
+                      <div className="flex items-center gap-3 flex-1">
+                        {profile?.[field]
+                          ? <Eye className="h-5 w-5 text-primary flex-shrink-0" />
+                          : <EyeOff className="h-5 w-5 text-muted-foreground flex-shrink-0" />}
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-sm">
+                            {field === "show_lists" ? "Show Reading Lists" : "Show Created Content"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {field === "show_lists"
+                              ? "Allow others to see your reading, completed, and planned lists"
+                              : "Allow others to see stories you've published"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex justify-end sm:justify-start">
+                        <Switch
+                          checked={profile?.[field] ?? true}
+                          onCheckedChange={(v) => togglePrivacy(field, v)}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </TabsContent>

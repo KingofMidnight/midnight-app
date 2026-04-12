@@ -24,7 +24,7 @@ const RichTextComment = ({ onSubmit, disabled }: RichTextCommentProps) => {
 
     quillRef.current = new Quill(containerRef.current, {
       theme: "snow",
-      placeholder: "Write a commentâ€¦",
+      placeholder: "Write a commentary",
       bounds: containerRef.current,
       modules: {
         toolbar: {

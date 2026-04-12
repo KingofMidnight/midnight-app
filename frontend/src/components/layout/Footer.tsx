@@ -63,8 +63,8 @@ const Footer = () => {
         <div className="mt-10 pt-6 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">{t.copyright}</p>
           <div className="flex items-center gap-4">
-            <a href="#" className="text-xs text-muted-foreground hover:text-foreground transition-colors">{t.terms}</a>
-            <a href="#" className="text-xs text-muted-foreground hover:text-foreground transition-colors">{t.privacyLink}</a>
+            <Link to="/terms" className="text-xs text-muted-foreground hover:text-foreground transition-colors">{t.terms}</Link>
+            <Link to="/settings" className="text-xs text-muted-foreground hover:text-foreground transition-colors">{t.privacyLink}</Link>
           </div>
         </div>
       </div>

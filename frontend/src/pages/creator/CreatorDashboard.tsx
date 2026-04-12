@@ -197,6 +197,7 @@ const CreatorDashboard = () => {
     approved: stories.filter(s => s.review_status === "approved").length,
     pending: stories.filter(s => s.review_status === "pending").length,
     rejected: stories.filter(s => s.review_status === "rejected").length,
+    archived: stories.filter(s => s.review_status === "archived").length,
     novels: stories.filter(s => s.type === "novel").length,
     mangas: stories.filter(s => s.type === "manga").length,
     animes: stories.filter(s => s.type === "anime").length,
@@ -309,6 +310,7 @@ const CreatorDashboard = () => {
       pending:  { label: "Pending Review", variant: "secondary" },
       approved: { label: "Approved",       variant: "default" },
       rejected: { label: "Rejected",       variant: "destructive" },
+      archived: { label: "Archived",       variant: "outline" },
     };
     const s = map[status] || map.pending;
     return <Badge variant={s.variant} className="text-xs">{s.label}</Badge>;
@@ -332,7 +334,7 @@ const CreatorDashboard = () => {
 
       {}
       {!creating && !editing && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="p-4 rounded-lg bg-card border border-border">
             <div className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-muted-foreground" />
@@ -363,6 +365,14 @@ const CreatorDashboard = () => {
               <span className="text-sm font-medium text-muted-foreground">Rejected</span>
             </div>
             <p className="text-2xl font-bold mt-1 text-red-600">{stats.rejected}</p>
+          </div>
+
+          <div className="p-4 rounded-lg bg-card border border-border">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-gray-500"></div>
+              <span className="text-sm font-medium text-muted-foreground">Archived</span>
+            </div>
+            <p className="text-2xl font-bold mt-1 text-gray-600">{stats.archived}</p>
           </div>
         </div>
       )}
@@ -510,6 +520,7 @@ const CreatorDashboard = () => {
                       <SelectItem value="approved">Approved</SelectItem>
                       <SelectItem value="pending">Pending</SelectItem>
                       <SelectItem value="rejected">Rejected</SelectItem>
+                      <SelectItem value="archived">Archived</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

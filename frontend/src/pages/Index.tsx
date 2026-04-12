@@ -176,7 +176,7 @@ const Index = () => {
       {activeSection && sectionStories.length > 0 && (
         <section className="container py-10">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold">{contentSections.find(s => s.key === activeSection)?.label}</h2>
+            <h2 className="text-xl font-bold">New {contentSections.find(s => s.key === activeSection)?.label}</h2>
             <Link to={`/browse?type=${activeSection}`} className="text-sm text-primary hover:underline flex items-center gap-1">
               {t.latest.viewAll} <ArrowRight className="h-3 w-3" />
             </Link>

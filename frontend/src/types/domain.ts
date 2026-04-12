@@ -58,6 +58,7 @@ export interface CommentWithProfile {
   updated_at: string;
   story_id: string;
   user_id: string;
+  parent_comment_id?: string | null;
   profiles: { username: string | null; avatar_url: string | null } | null;
 }
 

@@ -125,7 +125,7 @@
     discordUrl: "https://discord.gg/midnight",
     copyright: `© ${new Date().getFullYear()} Midnight. All rights reserved.`,
     terms: "Terms",
-    privacyLink: "Privacy",
+    privacyLink: "Configurações",
   },
 
   nav: {

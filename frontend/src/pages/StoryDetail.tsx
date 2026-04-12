@@ -15,6 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import RichTextComment from "@/components/RichTextComment";
+import { ThreadedComments } from "@/components/ThreadedComments";
 import ReportDialog from "@/components/ReportDialog";
 import { api } from "@/lib/api";
 import type {
@@ -24,6 +25,10 @@ import type {
 
 type ChapterRow = Pick<Chapter, "id" | "title" | "chapter_number" | "review_status">;
 type EpisodeRow = Pick<Episode, "id" | "title" | "episode_number" | "review_status">;
+
+type CommentNode = CommentWithProfile & {
+  replies: CommentNode[];
+};
 
 const typeIcons: Record<StoryType, typeof BookOpen> = {
   novel: BookOpen,
@@ -38,7 +43,7 @@ const StoryDetail = () => {
   const [story, setStory] = useState<Story | null>(null);
   const [chapters, setChapters] = useState<ChapterRow[]>([]);
   const [episodes, setEpisodes] = useState<EpisodeRow[]>([]);
-  const [comments, setComments] = useState<CommentWithProfile[]>([]);
+  const [comments, setComments] = useState<CommentNode[]>([]);
   const [avgRating, setAvgRating] = useState<number | null>(null);
   const [myRating, setMyRating] = useState(0);
   const [myList, setMyList] = useState<ListType | null>(null);
@@ -51,6 +56,77 @@ const StoryDetail = () => {
     last_chapter_id: string | null;
     last_episode_id: string | null;
   } | null>(null);
+
+  const buildCommentTree = (flatComments: CommentWithProfile[]): CommentNode[] => {
+    const commentMap = new Map<string, CommentNode>();
+    const roots: CommentNode[] = [];
+
+    flatComments.forEach((comment) => {
+      const node: CommentNode = {
+        ...comment,
+        replies: [],
+      };
+      commentMap.set(comment.id, node);
+    });
+
+    flatComments.forEach((comment) => {
+      const node = commentMap.get(comment.id);
+      if (!node) return;
+      if (comment.parent_comment_id) {
+        const parent = commentMap.get(comment.parent_comment_id);
+        if (parent) {
+          parent.replies.unshift(node);
+          return;
+        }
+      }
+      roots.unshift(node);
+    });
+
+    return roots;
+  };
+
+  const insertCommentNode = (tree: CommentNode[], newComment: CommentNode): CommentNode[] => {
+    if (!newComment.parent_comment_id) {
+      return [newComment, ...tree];
+    }
+
+    return tree.map((node) => {
+      if (node.id === newComment.parent_comment_id) {
+        return {
+          ...node,
+          replies: [newComment, ...node.replies],
+        };
+      }
+      return {
+        ...node,
+        replies: insertCommentNode(node.replies, newComment),
+      };
+    });
+  };
+
+  const removeCommentNode = (tree: CommentNode[], commentId: string): CommentNode[] => {
+    return tree
+      .filter((comment) => comment.id !== commentId)
+      .map((comment) => ({
+        ...comment,
+        replies: removeCommentNode(comment.replies, commentId),
+      }));
+  };
+
+  const flattenCommentTree = (tree: CommentNode[]): number =>
+    tree.reduce((count, comment) => count + 1 + flattenCommentTree(comment.replies), 0);
+
+  const convertToThreadedComment = (tree: CommentNode[]): any[] =>
+    tree.map((comment) => ({
+      id: comment.id,
+      content: comment.content,
+      userId: comment.user_id,
+      userName: comment.profiles?.username ?? "User",
+      userAvatar: comment.profiles?.avatar_url ?? undefined,
+      createdAt: comment.created_at,
+      replies: convertToThreadedComment(comment.replies),
+      parentCommentId: comment.parent_comment_id,
+    }));
 
   useEffect(() => {
     if (!id) return;
@@ -78,10 +154,13 @@ const StoryDetail = () => {
           .in("id", userIds);
         const profMap: Record<string, { username: string | null; avatar_url: string | null }> = {};
         profs?.forEach((p) => { profMap[p.id] = p; });
-        setComments(commRes.data.map((c) => ({
+
+        const flatComments = commRes.data.map((c) => ({
           ...c,
           profiles: profMap[c.user_id] ?? null,
-        })) as CommentWithProfile[]);
+        })) as CommentWithProfile[];
+
+        setComments(buildCommentTree(flatComments));
       }
 
       if (ratingRes.data?.length) {
@@ -140,15 +219,47 @@ const StoryDetail = () => {
     if (!user || !id || !html.trim()) return;
     const { data, error } = await supabase
       .from("comments")
-      .insert({ user_id: user.id, story_id: id, content: html })
+      .insert({ user_id: user.id, story_id: id, content: html, parent_comment_id: null })
       .select("*")
       .single();
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else if (data) {
-      const { data: prof } = await supabase.from("profiles").select("id, username, avatar_url").eq("id", user.id).single();
-      setComments([{ ...data, profiles: prof ?? null } as CommentWithProfile, ...comments]);
+      return;
     }
+
+    if (!data) return;
+
+    const { data: prof } = await supabase.from("profiles").select("id, username, avatar_url").eq("id", user.id).single();
+    const newComment: CommentNode = {
+      ...data,
+      profiles: prof ?? null,
+      replies: [],
+    };
+    setComments((prev) => insertCommentNode(prev, newComment));
+  };
+
+  const handleCommentAdded = (comment: {
+    id: string;
+    content: string;
+    userId: string;
+    userName: string;
+    userAvatar?: string;
+    createdAt: string;
+    parentCommentId?: string | null;
+  }) => {
+    const newComment: CommentNode = {
+      id: comment.id,
+      content: comment.content,
+      user_id: comment.userId,
+      user_name: comment.userName,
+      story_id: id ?? "",
+      created_at: comment.createdAt,
+      parent_comment_id: comment.parentCommentId ?? null,
+      profiles: { id: comment.userId, username: comment.userName, avatar_url: comment.userAvatar ?? null },
+      replies: [],
+    } as CommentNode;
+
+    setComments((prev) => insertCommentNode(prev, newComment));
   };
 
   const handleDeleteComment = async (commentId: string) => {
@@ -157,7 +268,7 @@ const StoryDetail = () => {
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
-      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      setComments((prev) => removeCommentNode(prev, commentId));
     }
     setDeletingCommentId(null);
   };
@@ -242,6 +353,8 @@ const StoryDetail = () => {
 
   const viewedChapterIds = getViewedChapterIds();
   const viewedEpisodeIds = getViewedEpisodeIds();
+  const commentCount = flattenCommentTree(comments);
+  const threadedComments = convertToThreadedComment(comments);
 
   return (
     <div className="min-h-screen">
@@ -422,7 +535,7 @@ const StoryDetail = () => {
 
         <section>
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <MessageSquare className="h-5 w-5 text-primary" /> Comments ({comments.length})
+            <MessageSquare className="h-5 w-5 text-primary" /> Comments ({commentCount})
           </h2>
           {user && (
             <div className="mb-6">
@@ -430,52 +543,14 @@ const StoryDetail = () => {
             </div>
           )}
           <div className="space-y-3">
-            {comments.map((c) => {
-              const canDelete = user && (isAdmin || c.user_id === user.id);
-              const isOwnComment = user?.id === c.user_id;
-              return (
-                <div key={c.id} className="p-4 rounded-lg bg-card border border-border">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Link to={`/profile/${c.user_id}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-                      <Avatar className="h-7 w-7">
-                        {c.profiles?.avatar_url ? <AvatarImage src={c.profiles.avatar_url} /> : null}
-                        <AvatarFallback className="text-xs"><User className="h-3.5 w-3.5" /></AvatarFallback>
-                      </Avatar>
-                      <span className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-                        {c.profiles?.username ?? "User"}
-                      </span>
-                    </Link>
-                    <span className="text-xs text-muted-foreground">{new Date(c.created_at).toLocaleDateString()}</span>
-                    <div className="ml-auto flex items-center gap-1">
-                      {user && !isOwnComment && (
-                        <ReportDialog
-                          commentId={c.id}
-                          reportedUserId={c.user_id}
-                          storyId={id}
-                          iconOnly
-                        />
-                      )}
-                      {canDelete && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 text-muted-foreground hover:text-destructive transition-colors"
-                          disabled={deletingCommentId === c.id}
-                          onClick={() => handleDeleteComment(c.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                  <div
-                    className="text-sm text-foreground/90 prose prose-sm prose-invert max-w-none"
-                    dangerouslySetInnerHTML={{ __html: c.content }}
-                  />
-                </div>
-              );
-            })}
-            {comments.length === 0 && <p className="text-muted-foreground text-sm">Be the first to leave a comment.</p>}
+            <ThreadedComments
+              storyId={id}
+              comments={threadedComments}
+              currentUserId={user?.id}
+              onCommentAdded={handleCommentAdded}
+              onDeleteComment={handleDeleteComment}
+            />
+            {commentCount === 0 && <p className="text-muted-foreground text-sm">Be the first to leave a comment.</p>}
           </div>
         </section>
       </div>

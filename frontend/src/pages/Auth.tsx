@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Mail, Lock, User, ArrowLeft } from "lucide-react";
 import authLogo from "@/assets/logo.png";
 import { siteContent } from "@/lib/content";
+import { HCaptcha } from "@/components/HCaptcha";
 
 const Auth = () => {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -14,6 +15,7 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string>("");
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -21,6 +23,16 @@ const Auth = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!captchaToken) {
+      toast({
+        title: "Verification required",
+        description: "Please complete the captcha verification.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setLoading(true);
 
     if (mode === "signup") {
@@ -91,6 +103,15 @@ const Auth = () => {
               minLength={6}
             />
           </div>
+
+          <div className="flex justify-center">
+            <HCaptcha
+              onVerify={setCaptchaToken}
+              onError={() => setCaptchaToken("")}
+              theme="dark"
+            />
+          </div>
+
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? siteContent.loading : mode === "signin" ? t.signIn : t.signUp}
           </Button>

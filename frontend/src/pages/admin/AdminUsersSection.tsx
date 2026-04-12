@@ -281,7 +281,6 @@ const AdminUsersSection = () => {
                               onClick={() => removeRole(u.id, r)}
                               className="ml-0.5 hover:opacity-70 transition-opacity"
                             >
-                              Ã—
                             </button>
                           )}
                         </Badge>

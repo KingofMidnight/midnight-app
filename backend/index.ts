@@ -8,12 +8,19 @@ dotenv.config();
 import exportRouter from "./src/routes/export.js";
 import adminRouter from "./src/routes/admin.js";
 import viewsRouter from "./src/routes/views.js";
+import authRouter from "./src/routes/auth.js";
+import blocksRouter from "./src/routes/blocks.js";
+import reviewsRouter from "./src/routes/reviews.js";
+import storiesRouter from "./src/routes/stories.js";
+import commentsRouter from "./src/routes/comments.js";
 import { errorHandler, notFound } from "./src/middleware/errorHandler.js";
+import { securityHeaders } from "./src/middleware/securityHeaders.js";
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
 
 app.use(helmet());
+app.use(securityHeaders);
 
 const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "http://localhost:8080,https://yourdomain.com")
   .split(",")
@@ -44,6 +51,11 @@ const globalLimiter = rateLimit({
 
 app.use(globalLimiter);
 
+app.use("/api/auth", authRouter);
+app.use("/api/blocks", blocksRouter);
+app.use("/api/reviews", reviewsRouter);
+app.use("/api/stories", storiesRouter);
+app.use("/api/comments", commentsRouter);
 app.use("/api/export", exportRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/views", viewsRouter);
