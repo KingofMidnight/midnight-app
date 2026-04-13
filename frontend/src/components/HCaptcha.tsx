@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
+import HCaptchaComponent from "@hcaptcha/react-hcaptcha";
 
 interface HCaptchaProps {
   onVerify: (token: string) => void;
@@ -7,50 +8,21 @@ interface HCaptchaProps {
 }
 
 export const HCaptcha = ({ onVerify, onError, theme = "light" }: HCaptchaProps) => {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const captchaRef = useRef<HCaptchaComponent>(null);
+  const sitekey = import.meta.env.VITE_HCAPTCHA_SITE_KEY;
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    const sitekey = import.meta.env.VITE_HCAPTCHA_SITE_KEY;
-    if (!sitekey) {
-      console.error("hCaptcha site key not configured");
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = "https://js.hcaptcha.com/1/api.js";
-    script.async = true;
-    script.defer = true;
-
-    script.onload = () => {
-      if (window.hcaptcha) {
-        window.hcaptcha.render(containerRef.current, {
-          sitekey,
-          theme,
-          callback: (response: any) => onVerify(response.response),
-          "error-callback": onError,
-        });
-      }
-    };
-
-    document.head.appendChild(script);
-
-    return () => {
-      if (document.head.contains(script)) document.head.removeChild(script);
-    };
-  }, [onVerify, onError, theme]);
-
-  return <div ref={containerRef} />;
-};
-
-declare global {
-  interface Window {
-    hcaptcha?: {
-      render: (element: HTMLElement | null, options: any) => void;
-      reset: () => void;
-      remove: () => void;
-      execute: (options?: any) => void;
-    };
+  if (!sitekey) {
+    console.error("hCaptcha site key not configured");
+    return <div>hCaptcha is not configured</div>;
   }
-}
+
+  return (
+    <HCaptchaComponent
+      ref={captchaRef}
+      sitekey={sitekey}
+      theme={theme}
+      onVerify={(token) => onVerify(token)}
+      onError={onError}
+    />
+  );
+};
