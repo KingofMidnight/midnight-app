@@ -1,8 +1,10 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
+import { commentLimiter } from "../middleware/rateLimiter.js";
 import { supabaseAdmin } from "../config/supabase.js";
 import { getBlockedUsers } from "../utils/userBlocks.js";
+import { sanitizeCommentHtml, validateTextContent } from "../utils/validation.js";
 
 const router = Router();
 
@@ -56,21 +58,31 @@ const buildCommentTree = (comments: any[]): CommentNode[] => {
   return roots;
 };
 
-router.post("/", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/", requireAuth, commentLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const { storyId, content, parentCommentId } = CreateCommentSchema.parse(req.body);
+
+    // Validate content length and characters
+    const contentValidation = validateTextContent(content, 1, 5000);
+    if (!contentValidation.valid) {
+      res.status(400).json({ success: false, error: contentValidation.error });
+      return;
+    }
+
+    // Sanitize HTML content to prevent XSS
+    const sanitizedContent = sanitizeCommentHtml(content);
 
     const { data, error } = await supabaseAdmin.from("comments").insert({
       story_id: storyId,
       user_id: req.user!.id,
-      content,
+      content: sanitizedContent,
       parent_comment_id: parentCommentId,
       is_approved: false,
     });
 
     if (error) throw error;
 
-    res.status(201).json({ success: true, comment: data[0] });
+    res.status(201).json({ success: true, comment: data?.[0] });
   } catch (error) {
     res.status(400).json({ success: false, error: "Invalid request." });
   }

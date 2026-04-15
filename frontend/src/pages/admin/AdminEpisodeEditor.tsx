@@ -57,7 +57,7 @@ const AdminEpisodeEditor = ({ storyId, isCreatorMode = false }: Props) => {
       embed_url: embedUrl || null,
       thumbnail_url: thumbnailUrl || null,
       duration_minutes: duration ? Number(duration) : null,
-      review_status: isCreatorMode ? "pending" : "approved",
+      review_status: "approved",
     };
 
     if (editing) {

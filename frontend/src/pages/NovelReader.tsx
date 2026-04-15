@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider";
+import { sanitizeChapterContent } from "@/utils/sanitize";
 
 const fonts = [
   { label: "Overpass", value: "'Overpass', sans-serif" },
@@ -64,10 +65,20 @@ const NovelReader = () => {
 
   useEffect(() => {
     if (!user || !storyId || !chapterId) return;
-    supabase.from("user_progress").upsert(
-      { user_id: user.id, story_id: storyId, last_chapter_id: chapterId },
-      { onConflict: "user_id,story_id" }
-    );
+    const saveProgress = async () => {
+      try {
+        const { data, error } = await supabase.from("user_progress").upsert(
+          { user_id: user.id, story_id: storyId, last_chapter_id: chapterId },
+          { onConflict: "user_id,story_id" }
+        );
+        if (error) {
+          console.error("Error saving progress:", error);
+        }
+      } catch (err) {
+        console.error("Exception saving progress:", err);
+      }
+    };
+    saveProgress();
   }, [chapterId, user, storyId]);
 
   const currentIdx = chapters.findIndex((c) => c.id === chapterId);
@@ -147,9 +158,9 @@ const NovelReader = () => {
 
       {/* Mobile Main Content */}
       <article
-        className="md:hidden container py-8 mx-auto animate-fade-in prose-invert"
+        className="container py-8 mx-auto animate-fade-in prose-invert"
         style={{ maxWidth: `${maxWidth}px`, fontSize: `${fontSize}px`, lineHeight, fontFamily }}
-        dangerouslySetInnerHTML={{ __html: chapter?.content || "<p>No content.</p>" }}
+        dangerouslySetInnerHTML={{ __html: sanitizeChapterContent(chapter?.content || "<p>No content.</p>") }}
       />
 
       {/* Mobile Ad - Bottom */}

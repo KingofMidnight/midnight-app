@@ -9,6 +9,7 @@ import Quill from "quill";
 import "quill/dist/quill.snow.css";
 import MultiImageUpload from "@/components/MultiImageUpload";
 import type { Chapter, StoryType } from "@/types/domain";
+import { sanitizeAdminContent } from "@/utils/sanitize";
 
 interface Props {
   storyId: string;
@@ -28,10 +29,11 @@ const AdminChapterEditor = ({ storyId, storyType, isCreatorMode = false }: Props
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const quillRef = useRef<Quill | null>(null);
 
-  const isManga = storyType === "manga" || storyType === "comic";
+  const isManga = storyType === "manga";
+const isAnime = storyType === "anime";
 
   useEffect(() => {
-    if (isManga) return;
+    if (isManga || isAnime) return;
     if (!editorContainerRef.current) return;
     if (quillRef.current) return;
 
@@ -50,7 +52,7 @@ const AdminChapterEditor = ({ storyId, storyType, isCreatorMode = false }: Props
         ],
       },
     });
-  }, [isManga, creating, editing]);
+  }, [isManga, isAnime, creating, editing]);
 
   const loadChapters = useCallback(async () => {
     const { data } = await supabase
@@ -88,14 +90,15 @@ const AdminChapterEditor = ({ storyId, storyType, isCreatorMode = false }: Props
   };
 
   const handleSave = async () => {
-    const content = isManga ? null : (quillRef.current?.root.innerHTML ?? "");
+    const rawContent = isManga || isAnime ? null : (quillRef.current?.root.innerHTML ?? "");
+    const content = rawContent ? sanitizeAdminContent(rawContent) : null;
     const payload = {
       story_id: storyId,
       title,
       chapter_number: chapterNumber,
       content,
       image_urls: isManga ? imageUrls : [],
-      review_status: isCreatorMode ? "pending" : "approved",
+      review_status: "approved",
     };
 
     if (editing) {
@@ -237,6 +240,10 @@ const AdminChapterEditor = ({ storyId, storyType, isCreatorMode = false }: Props
               value={imageUrls}
               onChange={setImageUrls}
             />
+          ) : isAnime ? (
+            <div className="border border-border rounded-lg bg-card p-4">
+              <p className="text-muted-foreground">Anime chapters use video episodes. Please use the Episode Editor for anime content.</p>
+            </div>
           ) : (
             <div className="chapter-quill">
               <div ref={editorContainerRef} />

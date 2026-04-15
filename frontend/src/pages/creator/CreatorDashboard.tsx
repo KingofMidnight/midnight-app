@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,11 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Edit, Save, X, AlertCircle, Search, Eye, BarChart3, List, LayoutGrid, Rows3, Image, Heart } from "lucide-react";
+import { Plus, Trash2, Edit, Save, X, AlertCircle, Search, Eye, BarChart3, List, LayoutGrid, Rows3, Image, Heart, BookOpen, Tv, Play } from "lucide-react";
 import { Link } from "react-router-dom";
 import ImageUpload from "@/components/ImageUpload";
 import FilteredTagInput from "@/components/FilteredTagInput";
@@ -111,6 +110,7 @@ const CreatorDashboard = () => {
   const [editing, setEditing] = useState<any | null>(null);
   const [creating, setCreating] = useState(false);
   const [selectedStory, setSelectedStory] = useState<string | null>(null);
+  const [showFullEditor, setShowFullEditor] = useState(false);
   const [layout, setLayout] = useState<"grid" | "list-compact" | "list-large">("grid");
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
 
@@ -149,9 +149,7 @@ const CreatorDashboard = () => {
   useEffect(() => {
     if (user) {
       const loadFavorites = async () => {
-
         const { data } = await supabase.from("user_favorites" as any).select("story_id").eq("user_id", user.id);
-
         if (data) setFavoriteIds(new Set(data.map((f: any) => f.story_id)));
       };
       loadFavorites();
@@ -238,6 +236,8 @@ const CreatorDashboard = () => {
     });
     setEditing(story);
     setCreating(false);
+    setSelectedStory(story.id);
+    setShowFullEditor(true);
   };
 
   const handleSave = async () => {
@@ -286,12 +286,10 @@ const CreatorDashboard = () => {
     try {
       const isFavorited = favoriteIds.has(story.id);
       if (isFavorited) {
-
         await supabase.from("user_favorites" as any).delete().eq("user_id", user.id).eq("story_id", story.id);
         setFavoriteIds((prev) => { const n = new Set(prev); n.delete(story.id); return n; });
         toast({ title: "Removed from favorites" });
       } else {
-
         await supabase.from("user_favorites" as any).insert({ user_id: user.id, story_id: story.id });
         setFavoriteIds((prev) => new Set(prev).add(story.id));
         toast({ title: "Added to favorites" });
@@ -318,22 +316,23 @@ const CreatorDashboard = () => {
 
   return (
     <div className="container py-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Creator Dashboard</h1>
-        {!creating && !editing && (
-          <Button onClick={() => { resetForm(); setCreating(true); }} className="gap-1.5">
-            <Plus className="h-4 w-4" /> New Story
-          </Button>
-        )}
-      </div>
+      {!showFullEditor && (
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold">Creator Dashboard</h1>
+          {!creating && !editing && (
+            <Button onClick={() => { resetForm(); setCreating(true); }} className="gap-1.5">
+              <Plus className="h-4 w-4" /> New Story
+            </Button>
+          )}
+        </div>
+      )}
 
       <div className="flex items-start gap-2 p-3 rounded-lg bg-secondary/50 border border-border text-sm text-muted-foreground">
         <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
         <p>New stories and edits are submitted for admin review before becoming publicly visible.</p>
       </div>
 
-      {}
-      {!creating && !editing && (
+      {!creating && !editing && !showFullEditor && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="p-4 rounded-lg bg-card border border-border">
             <div className="flex items-center gap-2">
@@ -377,7 +376,7 @@ const CreatorDashboard = () => {
         </div>
       )}
 
-      {(creating || editing) && (
+      {(creating || editing) && !showFullEditor && (
         <div className="border border-border rounded-lg bg-card p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold">{editing ? "Edit Story" : "Create Story"}</h2>
@@ -412,7 +411,6 @@ const CreatorDashboard = () => {
               searchable={false}
             />
 
-            {}
             <div className="sm:col-span-2">
               <SelectDropdown
                 label="Content Origin"
@@ -439,14 +437,14 @@ const CreatorDashboard = () => {
               values={form.genres}
               onChange={(vals) => setForm({ ...form, genres: vals })}
               options={allGenres}
-              placeholder="Search genresâ€¦"
+              placeholder="Search genres..."
             />
             <FilteredTagInput
               label="Tags"
               values={form.tags}
               onChange={(vals) => setForm({ ...form, tags: vals })}
               options={allTags}
-              placeholder="Search tagsâ€¦"
+              placeholder="Search tags..."
             />
           </div>
 
@@ -464,20 +462,12 @@ const CreatorDashboard = () => {
         </div>
       )}
 
-      <Tabs value={selectedStory ? "content" : "stories"} onValueChange={(val) => { if (val === "stories") setSelectedStory(null); }}>
-        <TabsList className="bg-secondary border border-border">
-          <TabsTrigger value="stories" className="data-[state=active]:bg-card">My Stories</TabsTrigger>
-          <TabsTrigger value="content" className="data-[state=active]:bg-card" disabled={!isSelectedStoryVisible}>
-            {isSelectedStoryVisible ? "Chapters / Episodes" : "Select a story"}
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="stories" className="mt-4">
+      {!showFullEditor && (
+        <div className="mt-4">
           {loading ? (
             <p className="text-muted-foreground">Loading...</p>
           ) : (
             <div className="space-y-4">
-              {}
               <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
                 <div className="flex gap-2 flex-wrap items-center">
                   <div className="relative">
@@ -560,129 +550,252 @@ const CreatorDashboard = () => {
                 </div>
               </div>
 
-              {}
               {paginatedStories.length === 0 ? (
                 <p className="text-muted-foreground">
                   {stories.length === 0 ? "No stories yet. Create your first one!" : "No stories match your filters."}
                 </p>
               ) : (
                 <>
-          {layout === "grid" ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
-              {paginatedStories.map((story) => (
-                <div key={story.id} className="relative">
-                  <div onClick={() => setSelectedStory(story.id)} className="cursor-pointer">
-                    <ContentCard story={story} />
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute top-2 right-2 h-7 w-7 bg-background/80 backdrop-blur-sm z-10"
-                    onClick={(e) => { e.preventDefault(); toggleFavorite(story); }}
-                    title={favoriteIds.has(story.id) ? "Remove from favorites" : "Add to favorites"}
-                  >
-                    <Heart className={`h-3.5 w-3.5 ${favoriteIds.has(story.id) ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          ) : layout === "list-large" ? (
-            <div className="space-y-3">
-              {paginatedStories.map((story) => (
-                <div key={story.id} className="border border-border rounded-lg bg-card hover:bg-secondary/50 transition-colors flex overflow-hidden min-h-32 cursor-pointer relative" onClick={() => setSelectedStory(story.id)}>
-                  <div className="w-24 flex-shrink-0 bg-secondary overflow-hidden">
-                    {story.cover_image_url ? (
-                      <img src={story.cover_image_url} alt={story.title} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-muted">
-                        <Image className="h-8 w-8 text-muted-foreground" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 p-3 flex flex-col justify-between">
-                    <div>
-                      <h3 className="font-semibold text-sm sm:text-base line-clamp-2 hover:text-primary">{story.title}</h3>
-                      <p className="text-xs sm:text-sm text-muted-foreground">{story.author_name}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{story.description}</p>
+                  {layout === "grid" ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+                      {paginatedStories.map((story) => (
+                        <div key={story.id} className="relative">
+                          <div onClick={() => setSelectedStory(story.id)} className="cursor-pointer">
+                            <ContentCard story={story} />
+                          </div>
+                          <div className="absolute top-2 right-2 flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 bg-background/80 backdrop-blur-sm z-10"
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); startEdit(story); }}
+                              title="Edit story"
+                            >
+                              <Edit className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 bg-background/80 backdrop-blur-sm z-10"
+                              onClick={(e) => { e.preventDefault(); toggleFavorite(story); }}
+                              title={favoriteIds.has(story.id) ? "Remove from favorites" : "Add to favorites"}
+                            >
+                              <Heart className={`h-3.5 w-3.5 ${favoriteIds.has(story.id) ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="flex gap-2 mt-2 items-center">
-                      <Badge variant="outline" className="capitalize text-xs">{story.status}</Badge>
-                      <Badge variant="secondary" className="text-xs">{story.type}</Badge>
+                  ) : layout === "list-large" ? (
+                    <div className="space-y-3">
+                      {paginatedStories.map((story) => (
+                        <div key={story.id} className="border border-border rounded-lg bg-card hover:bg-secondary/50 transition-colors flex overflow-hidden min-h-32 cursor-pointer relative" onClick={() => setSelectedStory(story.id)}>
+                          <div className="w-24 flex-shrink-0 bg-secondary overflow-hidden">
+                            {story.cover_image_url ? (
+                              <img src={story.cover_image_url} alt={story.title} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-muted">
+                                <Image className="h-8 w-8 text-muted-foreground" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 p-3 flex flex-col justify-between">
+                            <div>
+                              <h3 className="font-semibold text-sm sm:text-base line-clamp-2 hover:text-primary">{story.title}</h3>
+                              <p className="text-xs sm:text-sm text-muted-foreground">{story.author_name}</p>
+                              <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{story.description}</p>
+                            </div>
+                            <div className="flex gap-2 mt-2 items-center">
+                              <Badge variant="outline" className="capitalize text-xs">{story.status}</Badge>
+                              <Badge variant="secondary" className="text-xs">{story.type}</Badge>
+                            </div>
+                          </div>
+                          <div className="absolute top-2 right-2 flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 bg-background/80 backdrop-blur-sm z-10"
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); startEdit(story); }}
+                              title="Edit story"
+                            >
+                              <Edit className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 bg-background/80 backdrop-blur-sm z-10"
+                              onClick={(e) => { e.preventDefault(); toggleFavorite(story); }}
+                              title={favoriteIds.has(story.id) ? "Remove from favorites" : "Add to favorites"}
+                            >
+                              <Heart className={`h-3.5 w-3.5 ${favoriteIds.has(story.id) ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute top-2 right-2 h-7 w-7 bg-background/80 backdrop-blur-sm z-10"
-                    onClick={(e) => { e.preventDefault(); toggleFavorite(story); }}
-                    title={favoriteIds.has(story.id) ? "Remove from favorites" : "Add to favorites"}
-                  >
-                    <Heart className={`h-3.5 w-3.5 ${favoriteIds.has(story.id) ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {paginatedStories.map((story) => (
-                <div key={story.id} className="border border-border rounded-lg p-3 bg-card hover:bg-secondary/50 transition-colors cursor-pointer relative" onClick={() => setSelectedStory(story.id)}>
-                  <div className="block">
-                    <h3 className="font-semibold text-sm sm:text-base truncate hover:text-primary">{story.title}</h3>
-                    <p className="text-xs sm:text-sm text-muted-foreground truncate">{story.author_name}</p>
-                    <div className="flex gap-2 mt-2 items-center">
-                      <Badge variant="outline" className="capitalize text-xs">{story.status}</Badge>
-                      <Badge variant="secondary" className="text-xs">{story.type}</Badge>
+                  ) : (
+                    <div className="space-y-2">
+                      {paginatedStories.map((story) => (
+                        <div key={story.id} className="border border-border rounded-lg p-3 bg-card hover:bg-secondary/50 transition-colors cursor-pointer relative" onClick={() => setSelectedStory(story.id)}>
+                          <div className="block">
+                            <h3 className="font-semibold text-sm sm:text-base truncate hover:text-primary">{story.title}</h3>
+                            <p className="text-xs sm:text-sm text-muted-foreground truncate">{story.author_name}</p>
+                            <div className="flex gap-2 mt-2 items-center">
+                              <Badge variant="outline" className="capitalize text-xs">{story.status}</Badge>
+                              <Badge variant="secondary" className="text-xs">{story.type}</Badge>
+                            </div>
+                          </div>
+                          <div className="absolute top-2 right-2 flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 bg-background/80 backdrop-blur-sm z-10"
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); startEdit(story); }}
+                              title="Edit story"
+                            >
+                              <Edit className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 bg-background/80 backdrop-blur-sm z-10"
+                              onClick={(e) => { e.preventDefault(); toggleFavorite(story); }}
+                              title={favoriteIds.has(story.id) ? "Remove from favorites" : "Add to favorites"}
+                            >
+                              <Heart className={`h-3.5 w-3.5 ${favoriteIds.has(story.id) ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
+                  )}
+                  <div className="mt-6 sm:mt-8">
+                    <PaginationControls
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={setCurrentPage}
+                    />
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute top-2 right-2 h-7 w-7 bg-background/80 backdrop-blur-sm z-10"
-                    onClick={(e) => { e.preventDefault(); toggleFavorite(story); }}
-                    title={favoriteIds.has(story.id) ? "Remove from favorites" : "Add to favorites"}
-                  >
-                    <Heart className={`h-3.5 w-3.5 ${favoriteIds.has(story.id) ? "fill-red-500 text-red-500" : "text-muted-foreground"}`} />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="mt-6 sm:mt-8">
-            <PaginationControls
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    onPageChange={setCurrentPage}
-                  />
-          </div>
-        </>
+                </>
               )}
             </div>
           )}
-        </TabsContent>
+        </div>
+      )}
 
-        <TabsContent value="content" className="mt-4">
-          {isSelectedStoryVisible && (() => {
-            const story = stories.find((s) => s.id === selectedStory);
-            if (!story) return null;
-            const isAnime = ["anime"].includes(story.type);
-            return (
-              <div className="space-y-4">
-                <Button variant="outline" onClick={() => setSelectedStory(null)} className="gap-2">
-                  <span>â†</span> Back to Stories
+      {showFullEditor && selectedStory && (() => {
+        const story = stories.find((s) => s.id === selectedStory);
+        if (!story) return null;
+        const isAnime = ["anime"].includes(story.type);
+        return (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <Button variant="outline" onClick={() => { setShowFullEditor(false); setSelectedStory(null); }} className="gap-2">
+                <span>â</span> Back to Stories
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="destructive" onClick={() => handleDelete(story.id)} className="gap-1.5">
+                  <Trash2 className="h-4 w-4" /> Delete Story
                 </Button>
-                {isAnime ? (
-                  <AdminEpisodeEditor storyId={selectedStory} isCreatorMode />
-                ) : (
-                  <AdminChapterEditor storyId={selectedStory} storyType={story.type} isCreatorMode />
-                )}
               </div>
-            );
-          })()}
-        </TabsContent>
-      </Tabs>
+            </div>
+            
+            <div className="border border-border rounded-lg bg-card p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold">Edit Story Details</h2>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input
+                  placeholder="Title"
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  className="bg-background border-border"
+                />
+                <Input
+                  placeholder="Author name"
+                  value={form.author_name}
+                  onChange={(e) => setForm({ ...form, author_name: e.target.value })}
+                  className="bg-background border-border"
+                />
+                <SelectDropdown
+                  label="Type"
+                  value={form.type}
+                  onChange={(v) => setForm({ ...form, type: v })}
+                  options={storyTypes.map(t => ({ value: t.value, label: t.label }))}
+                  searchable={false}
+                />
+                <SelectDropdown
+                  label="Status"
+                  value={form.status}
+                  onChange={(v) => setForm({ ...form, status: v })}
+                  options={storyStatuses.map(s => ({ value: s.value, label: s.label }))}
+                  searchable={false}
+                />
+                <div className="sm:col-span-2">
+                  <SelectDropdown
+                    label="Content Origin"
+                    value={form.content_origin}
+                    onChange={(v) => setForm({ ...form, content_origin: v })}
+                    options={contentOrigins.map(c => ({ value: c.value, label: c.label }))}
+                    searchable={false}
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <ImageUpload
+                    bucket="covers"
+                    label="Cover Image"
+                    value={form.cover_image_url}
+                    onChange={(url) => setForm({ ...form, cover_image_url: url })}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 mt-4">
+                <FilteredTagInput
+                  label="Genres"
+                  values={form.genres}
+                  onChange={(vals) => setForm({ ...form, genres: vals })}
+                  options={allGenres}
+                  placeholder="Search genres..."
+                />
+                <FilteredTagInput
+                  label="Tags"
+                  values={form.tags}
+                  onChange={(vals) => setForm({ ...form, tags: vals })}
+                  options={allTags}
+                  placeholder="Search tags..."
+                />
+              </div>
+              <Textarea
+                placeholder="Description..."
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                className="bg-background border-border mt-4"
+                rows={3}
+              />
+              <Button onClick={handleSave} className="gap-1.5 mt-4">
+                <Save className="h-4 w-4" />Update Story
+              </Button>
+            </div>
+            
+            <div>
+              <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                {isAnime ? (
+                  <><Play className="h-5 w-5 text-primary" /> Episodes</>
+                ) : (
+                  <><BookOpen className="h-5 w-5 text-primary" /> Chapters</>
+                )}
+              </h3>
+              {isAnime ? (
+                <AdminEpisodeEditor storyId={selectedStory} isCreatorMode />
+              ) : (
+                <AdminChapterEditor storyId={selectedStory} storyType={story.type} isCreatorMode />
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
 
 export default CreatorDashboard;
-

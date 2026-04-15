@@ -13,6 +13,7 @@ import blocksRouter from "./src/routes/blocks.js";
 import reviewsRouter from "./src/routes/reviews.js";
 import storiesRouter from "./src/routes/stories.js";
 import commentsRouter from "./src/routes/comments.js";
+import filesRouter from "./src/routes/files.js";
 import { errorHandler, notFound } from "./src/middleware/errorHandler.js";
 import { securityHeaders } from "./src/middleware/securityHeaders.js";
 
@@ -59,6 +60,7 @@ app.use("/api/comments", commentsRouter);
 app.use("/api/export", exportRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/views", viewsRouter);
+app.use("/api/files", filesRouter);
 
 app.use(notFound);
 app.use(errorHandler);

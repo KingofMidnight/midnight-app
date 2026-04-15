@@ -44,10 +44,20 @@ const AnimePlayer = () => {
 
   useEffect(() => {
     if (!user || !current || !storyId) return;
-    supabase.from("user_progress").upsert(
-      { user_id: user.id, story_id: storyId, last_episode_id: current.id },
-      { onConflict: "user_id,story_id" }
-    );
+    const saveProgress = async () => {
+      try {
+        const { data, error } = await supabase.from("user_progress").upsert(
+          { user_id: user.id, story_id: storyId, last_episode_id: current.id },
+          { onConflict: "user_id,story_id" }
+        );
+        if (error) {
+          console.error("Error saving anime progress:", error);
+        }
+      } catch (err) {
+        console.error("Exception saving anime progress:", err);
+      }
+    };
+    saveProgress();
   }, [current, user, storyId]);
 
   const currentIdx = episodes.findIndex((e) => e.id === current?.id);
@@ -110,6 +120,9 @@ const AnimePlayer = () => {
                   className="w-full h-full"
                   allowFullScreen
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms"
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  loading="lazy"
                 />
               </div>
             ) : (

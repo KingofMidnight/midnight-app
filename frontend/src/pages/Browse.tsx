@@ -260,7 +260,7 @@ const Browse = () => {
           <div className="relative flex flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
             <Input
-              placeholder={searchMode === "author" ? "Search by author nameâ€¦" : t.searchPlaceholder}
+              placeholder={searchMode === "author" ? "Search by author name..." : t.searchPlaceholder}
               className="pl-10 bg-card border-border text-sm rounded-r-none border-r-0"
               value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}

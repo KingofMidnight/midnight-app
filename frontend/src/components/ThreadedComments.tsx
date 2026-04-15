@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import RichTextComment from "@/components/RichTextComment";
 import { MessageCircle, Reply, Trash2, User, Clock } from "lucide-react";
 import { Link } from "react-router-dom";
+import { sanitizeComment } from "@/utils/sanitize";
 
 interface Comment {
   id: string;
@@ -176,7 +177,7 @@ export const ThreadedComments = ({
 
             <div
               className="text-sm text-foreground/90 leading-relaxed prose prose-sm prose-invert max-w-none mb-3"
-              dangerouslySetInnerHTML={{ __html: comment.content }}
+              dangerouslySetInnerHTML={{ __html: sanitizeComment(comment.content) }}
             />
 
             <div className="flex items-center gap-1">

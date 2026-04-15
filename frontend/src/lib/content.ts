@@ -6,7 +6,7 @@
     heading: "Your next obsession starts at",
     headingHighlight: "Midnight.",
     description:
-      "Dive into thousands of novels, manga and anime â€” handpicked, fan-submitted and always free. Read, watch, and discover stories that keep you up all night.",
+      "Dive into thousands of novels, manga and anime — handpicked, fan-submitted and always free. Read, watch, and discover stories that keep you up all night.",
     ctaPrimary: "Start Exploring",
     ctaSecondary: "Join for Free",
   },
@@ -33,12 +33,12 @@
     title: "Browse",
     description:
       "Explore our full catalog of novels, manga and anime. Use filters to find exactly what you're looking for.",
-    searchPlaceholder: "Search titles, authorsâ€¦",
+    searchPlaceholder: "Search titles, authors...",
     statusAll: "All statuses",
     clearFilters: "Clear filters",
     typeAll: "All",
     noResults: "No stories found. Try adjusting your filters.",
-    loading: "Loadingâ€¦",
+    loading: "Loading...",
   },
 
   auth: {
@@ -63,7 +63,7 @@
     createButton: "Create Creator Account",
     createdTitle: "Creator account created!",
     createdDesc: "Check your email to verify your account.",
-    bioPlaceholder: "Tell readers a little about yourselfâ€¦",
+    bioPlaceholder: "Tell readers a little about yourself...",
     displayNamePlaceholder: "Display Name (optional)",
   },
 
@@ -105,7 +105,7 @@
 
   footer: {
     description:
-      "Midnight is your home for novels, manga and anime â€” curated by fans, powered by creators. Read freely, discover endlessly.",
+      "Midnight is your home for novels, manga and anime — curated by fans, powered by creators. Read freely, discover endlessly.",
     quickLinksTitle: "Quick Links",
     quickLinks: [
       { label: "Home", to: "/" },

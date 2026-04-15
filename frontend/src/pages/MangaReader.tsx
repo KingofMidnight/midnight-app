@@ -33,10 +33,16 @@ const MangaReader = () => {
 
   useEffect(() => {
     if (!user || !storyId || !chapterId) return;
-    supabase.from("user_progress").upsert(
-      { user_id: user.id, story_id: storyId, last_chapter_id: chapterId },
-      { onConflict: "user_id,story_id" }
-    );
+    const saveProgress = async () => {
+      const { error } = await supabase.from("user_progress").upsert(
+        { user_id: user.id, story_id: storyId, last_chapter_id: chapterId },
+        { onConflict: "user_id,story_id" }
+      );
+      if (error) {
+        console.error("Error saving manga progress:", error);
+      }
+    };
+    saveProgress();
   }, [chapterId, user, storyId]);
 
   const currentIdx = chapters.findIndex((c) => c.id === chapterId);
@@ -72,7 +78,7 @@ const MangaReader = () => {
       </div>
 
       {/* Mobile Main Content */}
-      <div className="md:hidden max-w-3xl mx-auto px-4 space-y-1">
+      <div className="max-w-3xl mx-auto px-4 space-y-1">
         {(chapter?.image_urls || []).map((img: string, i: number) => (
           <div key={i} className="relative group">
             <img src={img} alt={`Page ${i + 1}`} className="w-full h-auto" loading="lazy" />
