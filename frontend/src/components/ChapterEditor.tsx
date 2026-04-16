@@ -17,7 +17,7 @@ interface Props {
   isCreatorMode?: boolean;
 }
 
-const AdminChapterEditor = ({ storyId, storyType, isCreatorMode = false }: Props) => {
+const ChapterEditor = ({ storyId, storyType, isCreatorMode = false }: Props) => {
   const { toast } = useToast();
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [editing, setEditing] = useState<Chapter | null>(null);
@@ -309,5 +309,5 @@ const AdminChapterEditor = ({ storyId, storyType, isCreatorMode = false }: Props
   );
 };
 
-export default AdminChapterEditor;
+export default ChapterEditor;
 
