@@ -15,8 +15,8 @@ import { Link } from "react-router-dom";
 import ImageUpload from "@/components/ImageUpload";
 import FilteredTagInput from "@/components/FilteredTagInput";
 import SelectDropdown from "@/components/SelectDropdown";
-import AdminChapterEditor from "@/pages/admin/AdminChapterEditor";
-import AdminEpisodeEditor from "@/pages/admin/AdminEpisodeEditor";
+import ContentEditor from "@/components/ContentEditor";
+import AnimeContentEditor from "@/components/AnimeContentEditor";
 import ContentCard from "@/components/ContentCard";
 
 const storyTypes = [
@@ -786,9 +786,9 @@ const CreatorDashboard = () => {
                 )}
               </h3>
               {isAnime ? (
-                <AdminEpisodeEditor storyId={selectedStory} isCreatorMode />
+                <AnimeContentEditor storyId={selectedStory} isCreatorMode />
               ) : (
-                <AdminChapterEditor storyId={selectedStory} storyType={story.type} isCreatorMode />
+                <ContentEditor storyId={selectedStory} storyType={story.type} isCreatorMode />
               )}
             </div>
           </div>

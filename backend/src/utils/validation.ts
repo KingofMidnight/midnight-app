@@ -1,7 +1,6 @@
 import DOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
 
-// Create a virtual DOM for server-side DOMPurify
 const window = new JSDOM('').window;
 const purify = DOMPurify(window);
 

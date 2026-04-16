@@ -16,8 +16,8 @@ import { Plus, Trash2, Edit, Save, X, Search, Eye } from "lucide-react";
 import { Link } from "react-router-dom";
 import PaginationControls from "@/components/PaginationControls";
 import ImageUpload from "@/components/ImageUpload";
-import AdminChapterEditor from "./AdminChapterEditor";
-import AdminEpisodeEditor from "./AdminEpisodeEditor";
+import ContentEditor from "@/components/ContentEditor";
+import AnimeContentEditor from "@/components/AnimeContentEditor";
 
 const storyTypes = ["novel", "manga", "anime"] as const;
 const storyStatuses = ["ongoing", "completed", "hiatus"] as const;
@@ -206,9 +206,9 @@ const AdminStoriesSection = () => {
         </div>
         <h3 className="text-lg font-bold mb-4">{isAnime ? "Episodes" : "Chapters"}</h3>
         {isAnime ? (
-          <AdminEpisodeEditor storyId={selectedStory} />
+          <AnimeContentEditor storyId={selectedStory} />
         ) : (
-          <AdminChapterEditor storyId={selectedStory} storyType={story.type} />
+          <ContentEditor storyId={selectedStory} storyType={story.type} />
         )}
       </div>
     );

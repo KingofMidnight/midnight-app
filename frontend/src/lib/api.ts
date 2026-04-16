@@ -146,6 +146,26 @@ export const api = {
     }
   },
 
+  sessionSecurity: {
+    async terminateAllSessions(): Promise<{ success: boolean; message: string }> {
+      const jwt = await getJwt();
+      const res = await fetch(`${BASE_URL}/api/session-security/terminate-all`, {
+        method: "POST",
+        headers: { 
+          Authorization: `Bearer ${jwt}`,
+          "Content-Type": "application/json"
+        },
+      });
+      
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to terminate sessions");
+      }
+      
+      return await res.json();
+    },
+  },
+
   views: {
     async record(storyId: string): Promise<number> {
       const res = await fetch(`${BASE_URL}/api/views/record`, {

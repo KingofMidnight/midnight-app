@@ -9,6 +9,7 @@ import exportRouter from "./src/routes/export.js";
 import adminRouter from "./src/routes/admin.js";
 import viewsRouter from "./src/routes/views.js";
 import authRouter from "./src/routes/auth.js";
+import sessionSecurityRouter from "./src/routes/session-security.js";
 import blocksRouter from "./src/routes/blocks.js";
 import reviewsRouter from "./src/routes/reviews.js";
 import storiesRouter from "./src/routes/stories.js";
@@ -53,6 +54,7 @@ const globalLimiter = rateLimit({
 app.use(globalLimiter);
 
 app.use("/api/auth", authRouter);
+app.use("/api/session-security", sessionSecurityRouter);
 app.use("/api/blocks", blocksRouter);
 app.use("/api/reviews", reviewsRouter);
 app.use("/api/stories", storiesRouter);

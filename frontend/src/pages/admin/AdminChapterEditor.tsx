@@ -25,12 +25,13 @@ const AdminChapterEditor = ({ storyId, storyType, isCreatorMode = false }: Props
   const [title, setTitle] = useState("");
   const [chapterNumber, setChapterNumber] = useState(1);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [content, setContent] = useState("");
 
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const quillRef = useRef<Quill | null>(null);
 
   const isManga = storyType === "manga";
-const isAnime = storyType === "anime";
+  const isAnime = storyType === "anime";
 
   useEffect(() => {
     if (isManga || isAnime) return;
@@ -52,6 +53,24 @@ const isAnime = storyType === "anime";
         ],
       },
     });
+  }, [isManga, isAnime, creating, editing]);
+
+  useEffect(() => {
+    if (isManga || isAnime || !quillRef.current) return;
+    
+    const handleTextChange = () => {
+      const text = quillRef.current?.root.innerHTML ?? "";
+      setContent(text);
+    };
+
+    quillRef.current.on('text-change', handleTextChange);
+    if (editing && content) {
+      quillRef.current.root.innerHTML = content;
+    }
+    
+    return () => {
+      quillRef.current?.off('text-change', handleTextChange);
+    };
   }, [isManga, isAnime, creating, editing]);
 
   const loadChapters = useCallback(async () => {
@@ -82,6 +101,10 @@ const isAnime = storyType === "anime";
     setTitle(ch.title);
     setChapterNumber(ch.chapter_number);
     setImageUrls(ch.image_urls ?? []);
+    if (ch.content) {
+      setContent(ch.content);
+    }
+    
     setTimeout(() => {
       if (quillRef.current && ch.content) {
         quillRef.current.clipboard.dangerouslyPasteHTML(ch.content);
@@ -90,13 +113,13 @@ const isAnime = storyType === "anime";
   };
 
   const handleSave = async () => {
-    const rawContent = isManga || isAnime ? null : (quillRef.current?.root.innerHTML ?? "");
-    const content = rawContent ? sanitizeAdminContent(rawContent) : null;
+    const rawContent = isManga || isAnime ? null : content;
+    const sanitizedContent = rawContent ? sanitizeAdminContent(rawContent) : null;
     const payload = {
       story_id: storyId,
       title,
       chapter_number: chapterNumber,
-      content,
+      content: sanitizedContent,
       image_urls: isManga ? imageUrls : [],
       review_status: "approved",
     };

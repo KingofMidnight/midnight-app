@@ -11,7 +11,7 @@ interface Props {
   isCreatorMode?: boolean;
 }
 
-const AdminEpisodeEditor = ({ storyId, isCreatorMode = false }: Props) => {
+const AnimeContentEditor = ({ storyId, isCreatorMode = false }: Props) => {
   const { toast } = useToast();
   const [episodes, setEpisodes] = useState<any[]>([]);
   const [editing, setEditing] = useState<any | null>(null);
@@ -130,5 +130,5 @@ const AdminEpisodeEditor = ({ storyId, isCreatorMode = false }: Props) => {
   );
 };
 
-export default AdminEpisodeEditor;
+export default AnimeContentEditor;
 

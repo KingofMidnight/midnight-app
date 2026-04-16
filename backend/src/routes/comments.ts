@@ -62,16 +62,13 @@ router.post("/", requireAuth, commentLimiter, async (req: Request, res: Response
   try {
     const { storyId, content, parentCommentId } = CreateCommentSchema.parse(req.body);
 
-    // Validate content length and characters
     const contentValidation = validateTextContent(content, 1, 5000);
     if (!contentValidation.valid) {
       res.status(400).json({ success: false, error: contentValidation.error });
       return;
     }
 
-    // Sanitize HTML content to prevent XSS
     const sanitizedContent = sanitizeCommentHtml(content);
-
     const { data, error } = await supabaseAdmin.from("comments").insert({
       story_id: storyId,
       user_id: req.user!.id,

@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import ContentCard from "@/components/ContentCard";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { SessionSecurity } from "@/components/SessionSecurity";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -134,10 +135,8 @@ const Profile = () => {
 
     try {
       if (isCreator) {
-        // Remove creator role and archive all works
         await supabase.from("user_roles").delete().eq("user_id", user.id).eq("role", "creator");
 
-        // Archive all user stories
         const { data: stories } = await supabase
           .from("stories")
           .select("id")
@@ -156,7 +155,6 @@ const Profile = () => {
           description: "You are no longer a creator. All your works have been archived.",
         });
       } else {
-        // Add creator role
         await supabase.from("user_roles").insert({
           user_id: user.id,
           role: "creator"
@@ -456,6 +454,10 @@ const Profile = () => {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
+                <SessionSecurity />
               </div>
             </div>
           </TabsContent>

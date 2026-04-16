@@ -5,10 +5,16 @@ import { createError } from "../middleware/errorHandler";
 const router = Router();
 
 function getClientIp(req: Request): string {
+  const cfIp = req.headers['cf-connecting-ip'];
+  if (cfIp && typeof cfIp === 'string') {
+    return cfIp;
+  }
+  
   const forwarded = req.headers["x-forwarded-for"];
   if (forwarded) {
     return (Array.isArray(forwarded) ? forwarded[0] : forwarded).split(",")[0].trim();
   }
+  
   return req.socket.remoteAddress ?? "unknown";
 }
 
