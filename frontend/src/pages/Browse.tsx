@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
 import { Search, Filter, BookOpen, Image, Tv, X, List, LayoutGrid, Rows3, Heart } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { siteContent } from "@/lib/content";
-import type { Story } from "@/types/domain";
+import type { Story, StoryType, StoryStatus } from "@/types/domain";
 
 const PAGE_SIZE = 24;
 
@@ -91,8 +91,8 @@ const Browse = () => {
   useEffect(() => {
     if (user) {
       const loadFavorites = async () => {
-        const { data } = await supabase.from("user_favorites" as any).select("story_id").eq("user_id", user.id);
-        if (data) setFavoriteIds(new Set(data.map((f: any) => f.story_id)));
+        const { data } = await supabase.from("user_favorites").select("story_id").eq("user_id", user.id);
+        if (data) setFavoriteIds(new Set(data.map((f) => f.story_id)));
       };
       loadFavorites();
     } else {
@@ -122,11 +122,11 @@ const Browse = () => {
     try {
       const isFavorited = favoriteIds.has(story.id);
       if (isFavorited) {
-        await supabase.from("user_favorites" as any).delete().eq("user_id", user.id).eq("story_id", story.id);
+        await supabase.from("user_favorites").delete().eq("user_id", user.id).eq("story_id", story.id);
         setFavoriteIds((prev) => { const n = new Set(prev); n.delete(story.id); return n; });
         toast({ title: "Removed from favorites" });
       } else {
-        await supabase.from("user_favorites" as any).insert({ user_id: user.id, story_id: story.id });
+        await supabase.from("user_favorites").insert({ user_id: user.id, story_id: story.id });
         setFavoriteIds((prev) => new Set(prev).add(story.id));
         toast({ title: "Added to favorites" });
       }
@@ -188,13 +188,13 @@ const Browse = () => {
         }
 
         if (activeType !== "all") {
-          countQuery = countQuery.eq("type", activeType as any);
-          dataQuery = dataQuery.eq("type", activeType as any);
+          countQuery = countQuery.eq("type", activeType as StoryType);
+          dataQuery = dataQuery.eq("type", activeType as StoryType);
         }
 
         if (activeStatuses.length > 0) {
-          countQuery = countQuery.in("status", activeStatuses as any);
-          dataQuery = dataQuery.in("status", activeStatuses as any);
+          countQuery = countQuery.in("status", activeStatuses as StoryStatus[]);
+          dataQuery = dataQuery.in("status", activeStatuses as StoryStatus[]);
         }
 
         if (selectedGenres.length > 0) {
@@ -482,14 +482,24 @@ const Browse = () => {
                   <a href={`/story/${story.id}`} className="flex-1 p-3 flex flex-col justify-between">
                     <div>
                       <h3 className="font-semibold text-sm sm:text-base line-clamp-2 hover:text-primary">{story.title}</h3>
-                      <p className="text-xs sm:text-sm text-muted-foreground">{story.author_name}</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground">
+                        {story.created_by ? (
+                          <Link
+                            to={`/profile/${story.created_by}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="hover:text-primary transition-colors"
+                          >
+                            {story.author_name}
+                          </Link>
+                        ) : story.author_name}
+                      </p>
                       <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{story.description}</p>
                     </div>
                     <div className="flex gap-2 mt-2 items-center flex-wrap">
                       <Badge variant="outline" className="capitalize text-xs">{story.status}</Badge>
                       <Badge variant="secondary" className="text-xs">{story.type}</Badge>
-                      {(story as any).view_count > 0 && (
-                        <span className="text-xs text-muted-foreground">{(story as any).view_count.toLocaleString()} views</span>
+                      {story.view_count != null && story.view_count > 0 && (
+                        <span className="text-xs text-muted-foreground">{story.view_count.toLocaleString()} views</span>
                       )}
                     </div>
                   </a>
@@ -511,7 +521,17 @@ const Browse = () => {
                 <div key={story.id} className="border border-border rounded-lg p-3 bg-card hover:bg-secondary/50 transition-colors relative">
                   <a href={`/story/${story.id}`} className="block">
                     <h3 className="font-semibold text-sm sm:text-base truncate hover:text-primary">{story.title}</h3>
-                    <p className="text-xs sm:text-sm text-muted-foreground truncate">{story.author_name}</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                      {story.created_by ? (
+                        <Link
+                          to={`/profile/${story.created_by}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="hover:text-primary transition-colors"
+                        >
+                          {story.author_name}
+                        </Link>
+                      ) : story.author_name}
+                    </p>
                     <div className="flex gap-2 mt-2 items-center">
                       <Badge variant="outline" className="capitalize text-xs">{story.status}</Badge>
                       <Badge variant="secondary" className="text-xs">{story.type}</Badge>

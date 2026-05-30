@@ -1,18 +1,22 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import GoogleAd from "@/components/GoogleAd";
+import type { Story, Chapter } from "@/types/domain";
+
+type ChapterRow = Pick<Chapter, "id" | "chapter_number" | "title" | "review_status">;
+type StoryRow = Pick<Story, "id" | "title">;
 
 const MangaReader = () => {
   const { storyId, chapterId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [story, setStory] = useState<any>(null);
-  const [chapter, setChapter] = useState<any>(null);
-  const [chapters, setChapters] = useState<any[]>([]);
+  const [story, setStory] = useState<StoryRow | null>(null);
+  const [chapter, setChapter] = useState<Chapter | null>(null);
+  const [chapters, setChapters] = useState<ChapterRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,11 +29,15 @@ const MangaReader = () => {
       ]);
       if (storyRes.data) setStory(storyRes.data);
       if (chapRes.data) setChapter(chapRes.data);
-      if (allChaps.data) setChapters(allChaps.data.filter((c: any) => c.review_status === "approved"));
+      if (allChaps.data) setChapters(allChaps.data.filter((c) => c.review_status === "approved"));
       setLoading(false);
     };
     load();
   }, [storyId, chapterId]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, [chapterId]);
 
   useEffect(() => {
     if (!user || !storyId || !chapterId) return;
@@ -49,7 +57,7 @@ const MangaReader = () => {
   const prevChap = currentIdx > 0 ? chapters[currentIdx - 1] : null;
   const nextChap = currentIdx < chapters.length - 1 ? chapters[currentIdx + 1] : null;
 
-  const goTo = (ch: any) => navigate(`/read/manga/${storyId}/${ch.id}`);
+  const goTo = (ch: ChapterRow) => navigate(`/read/manga/${storyId}/${ch.id}`);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
 
@@ -77,9 +85,8 @@ const MangaReader = () => {
         </div>
       </div>
 
-      {/* Mobile Main Content */}
       <div className="max-w-3xl mx-auto px-4 space-y-1">
-        {(chapter?.image_urls || []).map((img: string, i: number) => (
+        {(chapter?.image_urls ?? []).map((img, i) => (
           <div key={i} className="relative group">
             <img src={img} alt={`Page ${i + 1}`} className="w-full h-auto" loading="lazy" />
             <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -91,7 +98,6 @@ const MangaReader = () => {
         ))}
       </div>
 
-      {/* Mobile Ad - Bottom */}
       <div className="md:hidden px-4 py-4">
         <GoogleAd slot={import.meta.env.VITE_ADSENSE_MANGA_MOBILE_BOTTOM} format="horizontal" className="w-full" style={{ minHeight: "90px" }} />
       </div>
@@ -122,4 +128,3 @@ const MangaReader = () => {
 };
 
 export default MangaReader;
-

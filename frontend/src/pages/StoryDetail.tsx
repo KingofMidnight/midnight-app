@@ -30,6 +30,17 @@ type CommentNode = CommentWithProfile & {
   replies: CommentNode[];
 };
 
+interface ThreadedComment {
+  id: string;
+  content: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  createdAt: string;
+  replies: ThreadedComment[];
+  parentCommentId?: string | null;
+}
+
 const typeIcons: Record<StoryType, typeof BookOpen> = {
   novel: BookOpen,
   manga: Image,
@@ -116,7 +127,7 @@ const StoryDetail = () => {
   const flattenCommentTree = (tree: CommentNode[]): number =>
     tree.reduce((count, comment) => count + 1 + flattenCommentTree(comment.replies), 0);
 
-  const convertToThreadedComment = (tree: CommentNode[]): any[] =>
+  const convertToThreadedComment = (tree: CommentNode[]): ThreadedComment[] =>
     tree.map((comment) => ({
       id: comment.id,
       content: comment.content,
@@ -141,7 +152,7 @@ const StoryDetail = () => {
 
       if (storyRes.data) {
         setStory(storyRes.data);
-        setViewCount((storyRes.data as any).view_count ?? 0);
+        setViewCount(storyRes.data.view_count ?? 0);
       }
       setChapters((chapRes.data ?? []).filter((c) => c.review_status === "approved") as ChapterRow[]);
       setEpisodes((epRes.data ?? []).filter((e) => e.review_status === "approved") as EpisodeRow[]);
@@ -173,7 +184,7 @@ const StoryDetail = () => {
           supabase.from("ratings").select("rating").eq("story_id", id).eq("user_id", user.id).maybeSingle(),
           supabase.from("user_lists").select("list").eq("story_id", id).eq("user_id", user.id).maybeSingle(),
           supabase.from("user_progress").select("last_chapter_id, last_episode_id").eq("story_id", id).eq("user_id", user.id).maybeSingle(),
-          supabase.from("user_favorites" as any).select("id").eq("story_id", id).eq("user_id", user.id).maybeSingle(),
+          supabase.from("user_favorites").select("id").eq("story_id", id).eq("user_id", user.id).maybeSingle(),
         ]);
         if (myRatingRes.data) setMyRating(myRatingRes.data.rating);
         if (myListRes.data) setMyList(myListRes.data.list);
@@ -251,13 +262,13 @@ const StoryDetail = () => {
       id: comment.id,
       content: comment.content,
       user_id: comment.userId,
-      user_name: comment.userName,
       story_id: id ?? "",
       created_at: comment.createdAt,
+      updated_at: null,
       parent_comment_id: comment.parentCommentId ?? null,
-      profiles: { id: comment.userId, username: comment.userName, avatar_url: comment.userAvatar ?? null },
+      profiles: { username: comment.userName, avatar_url: comment.userAvatar ?? null },
       replies: [],
-    } as CommentNode;
+    };
 
     setComments((prev) => insertCommentNode(prev, newComment));
   };
@@ -293,11 +304,11 @@ const StoryDetail = () => {
     if (!id || !story) return;
     try {
       if (isFavorited) {
-        await supabase.from("user_favorites" as any).delete().eq("user_id", user.id).eq("story_id", id);
+        await supabase.from("user_favorites").delete().eq("user_id", user.id).eq("story_id", id);
         setIsFavorited(false);
         toast({ title: "Removed from favorites" });
       } else {
-        await supabase.from("user_favorites" as any).insert({ user_id: user.id, story_id: id });
+        await supabase.from("user_favorites").insert({ user_id: user.id, story_id: id });
         setIsFavorited(true);
         toast({ title: "Added to favorites" });
       }
@@ -378,7 +389,18 @@ const StoryDetail = () => {
                 <Badge variant="outline" className="capitalize">{story.content_origin}</Badge>
               </div>
               <h1 className="text-3xl font-bold">{story.title}</h1>
-              {story.author_name && <p className="text-muted-foreground">by {story.author_name}</p>}
+              {story.author_name && (
+                story.created_by ? (
+                  <p className="text-muted-foreground">
+                    by{" "}
+                    <Link to={`/profile/${story.created_by}`} className="hover:text-primary transition-colors underline underline-offset-2">
+                      {story.author_name}
+                    </Link>
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground">by {story.author_name}</p>
+                )
+              )}
               {story.description && (
                 <p className="text-muted-foreground text-sm leading-relaxed max-w-2xl">{story.description}</p>
               )}

@@ -2,7 +2,9 @@
 import { BookOpen, Image, Tv, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
-const typeIcons: Record<string, any> = {
+type IconComponent = typeof BookOpen;
+
+const typeIcons: Record<string, IconComponent> = {
   novel: BookOpen, manga: Image, anime: Tv
 };
 
@@ -16,6 +18,7 @@ export interface StoryCardData {
   id: string;
   title: string;
   author_name?: string | null;
+  created_by?: string | null;
   cover_image_url?: string | null;
   type: string;
   status: string;
@@ -58,7 +61,19 @@ const ContentCard = ({ story }: { story: StoryCardData }) => {
         <h3 className="font-semibold text-xs sm:text-sm leading-tight line-clamp-2 text-foreground group-hover:text-primary transition-colors">
           {story.title}
         </h3>
-        {story.author_name && <p className="text-xs text-muted-foreground truncate">{story.author_name}</p>}
+        {story.author_name && (
+          story.created_by ? (
+            <Link
+              to={`/profile/${story.created_by}`}
+              onClick={(e) => e.stopPropagation()}
+              className="text-xs text-muted-foreground truncate hover:text-primary transition-colors"
+            >
+              {story.author_name}
+            </Link>
+          ) : (
+            <p className="text-xs text-muted-foreground truncate">{story.author_name}</p>
+          )
+        )}
         <span className={`inline-block text-xs px-1.5 py-0.5 rounded-full border capitalize ${statusColors[story.status] || ""}`}>
           {story.status}
         </span>

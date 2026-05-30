@@ -55,7 +55,7 @@ export interface CommentWithProfile {
   id: string;
   content: string;
   created_at: string;
-  updated_at: string;
+  updated_at?: string | null;
   story_id: string;
   user_id: string;
   parent_comment_id?: string | null;

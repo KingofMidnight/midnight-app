@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -11,21 +11,22 @@ import ContentCard from "@/components/ContentCard";
 import ReportDialog from "@/components/ReportDialog";
 import PaginationControls from "@/components/PaginationControls";
 import { UserBlockButton } from "@/components/UserBlockButton";
+import type { Profile, Story, ListType } from "@/types/domain";
 
 const PublicProfile = () => {
   const { id } = useParams();
   const { user: currentUser } = useAuth();
   const { toast } = useToast();
-  const [profile, setProfile] = useState<any>(null);
-  const [lists, setLists] = useState<Record<string, any[]>>({ reading: [], completed: [], plan_to_read: [] });
-  const [createdStories, setCreatedStories] = useState<any[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [lists, setLists] = useState<Record<ListType, Story[]>>({ reading: [], completed: [], plan_to_read: [] });
+  const [createdStories, setCreatedStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCreator, setIsCreator] = useState(false);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [isFollowing, setIsFollowing] = useState(false);
   const [followCount, setFollowCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
-  const [favorites, setFavorites] = useState<Record<string, any[]>>({ novel: [], manga: [], anime: [] });
+  const [favorites, setFavorites] = useState<Record<string, Story[]>>({ novel: [], manga: [], anime: [] });
   const [showFavorites, setShowFavorites] = useState(false);
 
   const [createdPage, setCreatedPage] = useState(1);
@@ -71,10 +72,10 @@ const PublicProfile = () => {
       if (profRes.data?.show_lists) {
         const { data: listsData } = await supabase.from("user_lists").select("*, stories(*)").eq("user_id", id);
         if (listsData) {
-          const grouped: Record<string, any[]> = { reading: [], completed: [], plan_to_read: [] };
+          const grouped: Record<ListType, Story[]> = { reading: [], completed: [], plan_to_read: [] };
           listsData.forEach((l) => {
-            if (grouped[l.list] && l.stories && !hiddenSet.has(l.stories.id)) {
-              grouped[l.list].push(l.stories);
+            if (grouped[l.list as ListType] && l.stories && !hiddenSet.has(l.stories.id)) {
+              grouped[l.list as ListType].push(l.stories as Story);
             }
           });
           setLists(grouped);
@@ -85,12 +86,13 @@ const PublicProfile = () => {
         setShowFavorites(true);
         const { data: favRes } = await supabase.from("user_favorites").select("*, stories(*)").eq("user_id", id);
         if (favRes) {
-          const grouped: Record<string, any[]> = { novel: [], manga: [], anime: [] };
-          favRes.forEach((fav: any) => {
-            if (fav.stories) {
-              const type = (fav.stories.type || "novel").toLowerCase();
+          const grouped: Record<string, Story[]> = { novel: [], manga: [], anime: [] };
+          favRes.forEach((fav) => {
+            const storyData = fav.stories as Story | null;
+            if (storyData) {
+              const type = (storyData.type || "novel").toLowerCase();
               if (type in grouped) {
-                grouped[type].push(fav.stories);
+                grouped[type].push(storyData);
               }
             }
           });
@@ -98,7 +100,7 @@ const PublicProfile = () => {
         }
       }
 
-      if (creator && profRes.data?.show_created_content) {
+      if (creator) {
         const { data: stories } = await supabase
           .from("stories")
           .select("*")
@@ -125,7 +127,7 @@ const PublicProfile = () => {
   );
 
   const showLists = profile.show_lists;
-  const showCreated = profile.show_created_content && isCreator;
+  const showCreated = isCreator;
   const isOwnProfile = currentUser?.id === id;
 
   const toggleFollow = async () => {
@@ -206,8 +208,10 @@ const PublicProfile = () => {
       </div>
 
       <div className="container py-8">
-        {!showLists && !showCreated ? (
-          <p className="text-muted-foreground text-center py-12">This user's profile is private.</p>
+        {!showLists && !showCreated && !showFavorites ? (
+          <p className="text-muted-foreground text-center py-12">This user hasn't made their profile public yet.</p>
+        ) : !showCreated && !showLists && !showFavorites ? (
+          <p className="text-muted-foreground text-center py-12">Nothing to show here.</p>
         ) : (
           <Tabs defaultValue={showCreated ? "created" : "reading"}>
             <TabsList className="bg-secondary border border-border">

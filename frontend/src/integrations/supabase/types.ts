@@ -397,6 +397,7 @@ export type Database = {
           title: string
           type: Database["public"]["Enums"]["story_type"]
           updated_at: string
+          view_count: number | null
         }
         Insert: {
           author_name?: string | null
@@ -413,6 +414,7 @@ export type Database = {
           title: string
           type: Database["public"]["Enums"]["story_type"]
           updated_at?: string
+          view_count?: number | null
         }
         Update: {
           author_name?: string | null
@@ -429,6 +431,7 @@ export type Database = {
           title?: string
           type?: Database["public"]["Enums"]["story_type"]
           updated_at?: string
+          view_count?: number | null
         }
         Relationships: []
       }
