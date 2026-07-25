@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import GoogleAd from "@/components/GoogleAd";
+import { saveReadingProgress } from "@/services/progressService";
+import ContentComments from "@/components/ContentComments";
 import type { Story, Chapter } from "@/types/domain";
 
 type ChapterRow = Pick<Chapter, "id" | "chapter_number" | "title" | "review_status">;
@@ -40,18 +42,10 @@ const MangaReader = () => {
   }, [chapterId]);
 
   useEffect(() => {
-    if (!user || !storyId || !chapterId) return;
-    const saveProgress = async () => {
-      const { error } = await supabase.from("user_progress").upsert(
-        { user_id: user.id, story_id: storyId, last_chapter_id: chapterId },
-        { onConflict: "user_id,story_id" }
-      );
-      if (error) {
-        console.error("Error saving manga progress:", error);
-      }
-    };
-    saveProgress();
-  }, [chapterId, user, storyId]);
+    if (!user || !storyId || !chapterId || chapters.length === 0) return;
+    const isLastChapter = chapters[chapters.length - 1]?.id === chapterId;
+    saveReadingProgress({ userId: user.id, storyId, chapterId, isLastEntry: isLastChapter });
+  }, [chapterId, user, storyId, chapters]);
 
   const currentIdx = chapters.findIndex((c) => c.id === chapterId);
   const prevChap = currentIdx > 0 ? chapters[currentIdx - 1] : null;
@@ -123,6 +117,12 @@ const MangaReader = () => {
           </Button>
         </div>
       </div>
+
+      {chapter && (
+        <div className="max-w-3xl mx-auto px-4 py-6">
+          <ContentComments storyId={chapter.story_id} chapterId={chapter.id} currentUserId={user?.id} title="Chapter Comments" />
+        </div>
+      )}
     </div>
   );
 };

@@ -43,12 +43,16 @@ const Footer = () => {
             <h4 className="text-sm font-semibold text-foreground uppercase tracking-wider">{t.contactTitle}</h4>
             <ul className="space-y-2">
               <li className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Mail className="h-4 w-4 text-primary" />
-                <span>{t.email}</span>
+                <a href={`mailto:${t.email}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <Mail className="h-4 w-4 text-primary" />
+                  <span>{t.email}</span>
+                </a>
               </li>
               <li className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Phone className="h-4 w-4 text-primary" />
-                <span>{t.phone}</span>
+                <a href={`tel:${t.phone}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  <Phone className="h-4 w-4 text-primary" />
+                  <span>{t.phone}</span>
+                </a>
               </li>
               <li>
                 <a href={t.discordUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -64,7 +68,6 @@ const Footer = () => {
           <p className="text-xs text-muted-foreground">{t.copyright}</p>
           <div className="flex items-center gap-4">
             <Link to="/terms" className="text-xs text-muted-foreground hover:text-foreground transition-colors">{t.terms}</Link>
-            <Link to="/settings" className="text-xs text-muted-foreground hover:text-foreground transition-colors">{t.privacyLink}</Link>
           </div>
         </div>
       </div>

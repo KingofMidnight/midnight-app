@@ -18,6 +18,7 @@ import PaginationControls from "@/components/PaginationControls";
 import ImageUpload from "@/components/ImageUpload";
 import ContentEditor from "@/components/ContentEditor";
 import AnimeContentEditor from "@/components/AnimeContentEditor";
+import StoryRelationshipManager from "@/components/StoryRelationshipManager";
 
 const storyTypes = ["novel", "manga", "anime"] as const;
 const storyStatuses = ["ongoing", "completed", "hiatus"] as const;
@@ -210,6 +211,10 @@ const AdminStoriesSection = () => {
         ) : (
           <ContentEditor storyId={selectedStory} storyType={story.type} />
         )}
+
+        <div className="mt-6">
+          <StoryRelationshipManager storyId={selectedStory} />
+        </div>
       </div>
     );
   }
@@ -329,6 +334,7 @@ const AdminStoriesSection = () => {
             <SelectTrigger className="w-36 bg-background border-border"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
               <SelectItem value="approved">Approved</SelectItem>
               <SelectItem value="pending">Pending</SelectItem>
               <SelectItem value="rejected">Rejected</SelectItem>

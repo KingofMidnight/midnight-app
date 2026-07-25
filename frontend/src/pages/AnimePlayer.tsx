@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ChevronLeft, ChevronRight, Tv, List } from "lucide-react";
+import { saveReadingProgress } from "@/services/progressService";
+import ContentComments from "@/components/ContentComments";
 
 interface Episode {
   id: string;
@@ -43,22 +45,10 @@ const AnimePlayer = () => {
   }, [storyId, episodeId]);
 
   useEffect(() => {
-    if (!user || !current || !storyId) return;
-    const saveProgress = async () => {
-      try {
-        const { data, error } = await supabase.from("user_progress").upsert(
-          { user_id: user.id, story_id: storyId, last_episode_id: current.id },
-          { onConflict: "user_id,story_id" }
-        );
-        if (error) {
-          console.error("Error saving anime progress:", error);
-        }
-      } catch (err) {
-        console.error("Exception saving anime progress:", err);
-      }
-    };
-    saveProgress();
-  }, [current, user, storyId]);
+    if (!user || !current || !storyId || episodes.length === 0) return;
+    const isLastEpisode = episodes[episodes.length - 1]?.id === current.id;
+    saveReadingProgress({ userId: user.id, storyId, episodeId: current.id, isLastEntry: isLastEpisode });
+  }, [current, user, storyId, episodes]);
 
   const currentIdx = episodes.findIndex((e) => e.id === current?.id);
   const prevEp = currentIdx > 0 ? episodes[currentIdx - 1] : null;
@@ -138,6 +128,10 @@ const AnimePlayer = () => {
               {current.duration_minutes && (
                 <p className="text-sm text-muted-foreground">{current.duration_minutes} min</p>
               )}
+            </div>
+
+            <div className="mt-8">
+              <ContentComments storyId={story.id} episodeId={current.id} currentUserId={user?.id} title="Episode Comments" />
             </div>
           </div>
         </div>

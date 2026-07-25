@@ -59,25 +59,37 @@ export type Database = {
       }
       comments: {
         Row: {
+          chapter_id: string | null
           content: string
           created_at: string
+          episode_id: string | null
           id: string
+          is_approved: boolean | null
+          parent_comment_id: string | null
           story_id: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          chapter_id?: string | null
           content: string
           created_at?: string
+          episode_id?: string | null
           id?: string
+          is_approved?: boolean | null
+          parent_comment_id?: string | null
           story_id: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          chapter_id?: string | null
           content?: string
           created_at?: string
+          episode_id?: string | null
           id?: string
+          is_approved?: boolean | null
+          parent_comment_id?: string | null
           story_id?: string
           updated_at?: string
           user_id?: string
@@ -88,6 +100,27 @@ export type Database = {
             columns: ["story_id"]
             isOneToOne: false
             referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: false
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_episode_id_fkey"
+            columns: ["episode_id"]
+            isOneToOne: false
+            referencedRelation: "episodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_parent_comment_id_fkey"
+            columns: ["parent_comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
             referencedColumns: ["id"]
           },
         ]
@@ -300,6 +333,7 @@ export type Database = {
         Row: {
           admin_notes: string | null
           chapter_id: string | null
+          comment_id: string | null
           created_at: string
           details: string | null
           dmca_claimant_email: string | null
@@ -320,6 +354,7 @@ export type Database = {
         Insert: {
           admin_notes?: string | null
           chapter_id?: string | null
+          comment_id?: string | null
           created_at?: string
           details?: string | null
           dmca_claimant_email?: string | null
@@ -340,6 +375,7 @@ export type Database = {
         Update: {
           admin_notes?: string | null
           chapter_id?: string | null
+          comment_id?: string | null
           created_at?: string
           details?: string | null
           dmca_claimant_email?: string | null
@@ -363,6 +399,13 @@ export type Database = {
             columns: ["chapter_id"]
             isOneToOne: false
             referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
             referencedColumns: ["id"]
           },
           {

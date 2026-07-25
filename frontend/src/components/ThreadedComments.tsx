@@ -1,7 +1,6 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { UserBlockButton } from "./UserBlockButton";
-import { supabase } from "@/integrations/supabase/client";
 import RichTextComment from "@/components/RichTextComment";
 import { MessageCircle, Reply, Trash2, User, Clock } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -19,114 +18,43 @@ interface Comment {
 }
 
 interface ThreadedCommentsProps {
-  storyId: string;
   comments: Comment[];
   currentUserId?: string;
-  onCommentAdded?: (comment: Comment) => void;
+  onReply: (parentCommentId: string, html: string) => Promise<void>;
   onDeleteComment?: (commentId: string) => void;
 }
 
-const insertReply = (comments: Comment[], reply: Comment): Comment[] => {
-  return comments.map((comment) => {
-    if (comment.id === reply.parentCommentId) {
-      return {
-        ...comment,
-        replies: [reply, ...comment.replies],
-      };
-    }
-
-    if (comment.replies.length > 0) {
-      return {
-        ...comment,
-        replies: insertReply(comment.replies, reply),
-      };
-    }
-
-    return comment;
-  });
-};
-
 export const ThreadedComments = ({
-  storyId,
   comments,
   currentUserId,
-  onCommentAdded,
+  onReply,
   onDeleteComment,
 }: ThreadedCommentsProps) => {
-  const [threadedComments, setThreadedComments] = useState<Comment[]>(comments);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    setThreadedComments(comments);
-  }, [comments]);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleReply = useCallback(
-    async (parentCommentId: string | null, html: string) => {
-      if (!html.trim() || !currentUserId) return;
+    async (parentCommentId: string, html: string) => {
+      if (!html.trim()) return;
 
-      setLoading(true);
+      setSubmitting(true);
       try {
-        const { data, error } = await supabase.from("comments").insert({
-          story_id: storyId,
-          user_id: currentUserId,
-          content: html,
-          parent_comment_id: parentCommentId,
-          is_approved: false,
-        }).select("*");
-
-        const inserted = (data ?? [])[0] as { id: string; created_at?: string } | undefined;
-        if (error || !inserted) {
-          console.error("Failed to create comment response:", { error, data });
-          throw error || new Error("Failed to create comment.");
-        }
-
-        const newComment: Comment = {
-          id: inserted.id,
-          content: html,
-          userId: currentUserId,
-          userName: "You",
-          userAvatar: undefined,
-          createdAt: new Date().toISOString(),
-          replies: [],
-          parentCommentId,
-        };
-
-        if (parentCommentId) {
-          setThreadedComments((current) => insertReply(current, newComment));
-        } else {
-          setThreadedComments((current) => [newComment, ...current]);
-        }
-
-        onCommentAdded?.(newComment);
+        await onReply(parentCommentId, html);
         setReplyingTo(null);
       } catch (error) {
         console.error("Failed to post reply:", error);
       } finally {
-        setLoading(false);
+        setSubmitting(false);
       }
     },
-    [currentUserId, storyId, onCommentAdded]
-  );
-
-  const removeNestedComment = useCallback(
-    (comments: Comment[], commentId: string): Comment[] =>
-      comments
-        .filter((comment) => comment.id !== commentId)
-        .map((comment) => ({
-          ...comment,
-          replies: removeNestedComment(comment.replies, commentId),
-        })),
-    []
+    [onReply]
   );
 
   const handleDelete = useCallback(
-    async (commentId: string) => {
-      if (!onDeleteComment) return;
-      onDeleteComment(commentId);
-      setThreadedComments((current) => removeNestedComment(current, commentId));
+    (commentId: string) => {
+      onDeleteComment?.(commentId);
     },
-    [onDeleteComment, removeNestedComment]
+    [onDeleteComment]
   );
 
   const renderComment = (comment: Comment, depth = 0) => (
@@ -211,7 +139,7 @@ export const ThreadedComments = ({
                 <div className="border-t border-border/50 pt-3">
                   <RichTextComment
                     onSubmit={(html) => handleReply(comment.id, html)}
-                    disabled={loading}
+                    disabled={submitting}
                   />
                   <div className="flex justify-end mt-2">
                     <Button
@@ -240,7 +168,7 @@ export const ThreadedComments = ({
 
   return (
     <div className="space-y-3">
-      {threadedComments.length === 0 ? (
+      {comments.length === 0 ? (
         <div className="text-center py-12">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-muted/50 rounded-full mb-4">
             <MessageCircle className="w-8 h-8 text-muted-foreground" />
@@ -250,7 +178,7 @@ export const ThreadedComments = ({
         </div>
       ) : (
         <div className="space-y-3">
-          {threadedComments.map((comment) => renderComment(comment))}
+          {comments.map((comment) => renderComment(comment))}
         </div>
       )}
     </div>

@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Edit, Save, X, AlertCircle, Search, Eye, BarChart3, List, LayoutGrid, Rows3, Image, Heart, BookOpen, Tv, Play } from "lucide-react";
+import { Plus, Trash2, Edit, Save, X, AlertCircle, Search, Eye, BarChart3, List, LayoutGrid, Rows3, Image, Heart, BookOpen, Tv, Play, FileText, EyeOff, Send } from "lucide-react";
 import { Link } from "react-router-dom";
 import ImageUpload from "@/components/ImageUpload";
 import FilteredTagInput from "@/components/FilteredTagInput";
@@ -18,6 +18,7 @@ import SelectDropdown from "@/components/SelectDropdown";
 import ContentEditor from "@/components/ContentEditor";
 import AnimeContentEditor from "@/components/AnimeContentEditor";
 import ContentCard from "@/components/ContentCard";
+import StoryRelationshipManager from "@/components/StoryRelationshipManager";
 
 const storyTypes = [
   { value: "novel", label: "Novel" },
@@ -113,6 +114,7 @@ const CreatorDashboard = () => {
   const [showFullEditor, setShowFullEditor] = useState(false);
   const [layout, setLayout] = useState<"grid" | "list-compact" | "list-large">("grid");
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [authorDisplayName, setAuthorDisplayName] = useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState("all");
@@ -127,7 +129,6 @@ const CreatorDashboard = () => {
     type: "novel" as string,
     status: "ongoing" as string,
     content_origin: "unset" as string,
-    author_name: "",
     genres: [] as string[],
     tags: [] as string[],
     cover_image_url: "",
@@ -145,6 +146,15 @@ const CreatorDashboard = () => {
   };
 
   useEffect(() => { loadStories(); }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const loadAuthorName = async () => {
+      const { data } = await supabase.from("profiles").select("display_name, username").eq("id", user.id).single();
+      setAuthorDisplayName(data?.display_name || data?.username || "");
+    };
+    loadAuthorName();
+  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -192,6 +202,7 @@ const CreatorDashboard = () => {
 
   const stats = {
     total: stories.length,
+    draft: stories.filter(s => s.review_status === "draft").length,
     approved: stories.filter(s => s.review_status === "approved").length,
     pending: stories.filter(s => s.review_status === "pending").length,
     rejected: stories.filter(s => s.review_status === "rejected").length,
@@ -216,7 +227,7 @@ const CreatorDashboard = () => {
   const resetForm = () => {
     setForm({
       title: "", description: "", type: "novel", status: "ongoing",
-      content_origin: "unset", author_name: "", genres: [], tags: [], cover_image_url: "",
+      content_origin: "unset", genres: [], tags: [], cover_image_url: "",
     });
     setEditing(null);
     setCreating(false);
@@ -229,7 +240,6 @@ const CreatorDashboard = () => {
       type: story.type,
       status: story.status,
       content_origin: story.content_origin || "unset",
-      author_name: story.author_name || "",
       genres: story.genres || [],
       tags: story.tags || [],
       cover_image_url: story.cover_image_url || "",
@@ -240,7 +250,7 @@ const CreatorDashboard = () => {
     setShowFullEditor(true);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (targetStatus?: "draft" | "pending") => {
     const origin = form.content_origin === "unset" ? null : form.content_origin;
     const payload: any = {
       title: form.title,
@@ -248,22 +258,29 @@ const CreatorDashboard = () => {
       type: form.type,
       status: form.status,
       content_origin: origin ?? "original",
-      author_name: form.author_name || null,
+      author_name: authorDisplayName || null,
       genres: form.genres,
       tags: form.tags,
       cover_image_url: form.cover_image_url || null,
       created_by: user.id,
-      review_status: "pending" as const,
     };
+    if (targetStatus) payload.review_status = targetStatus;
+
+    const successMessage = targetStatus === "draft"
+      ? "Saved as draft"
+      : targetStatus === "pending"
+        ? "Submitted for review"
+        : "Story updated";
 
     if (editing) {
       const { error } = await supabase.from("stories").update(payload).eq("id", editing.id);
       if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
-      toast({ title: "Story updated & sent for review" });
+      toast({ title: successMessage });
     } else {
+      payload.review_status = targetStatus ?? "draft";
       const { error } = await supabase.from("stories").insert(payload);
       if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
-      toast({ title: "Story created & sent for review" });
+      toast({ title: payload.review_status === "pending" ? "Story created & sent for review" : "Story saved as draft" });
     }
     resetForm();
     loadStories();
@@ -305,6 +322,7 @@ const CreatorDashboard = () => {
 
   const reviewBadge = (status: string) => {
     const map: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+      draft:    { label: "Draft",          variant: "outline" },
       pending:  { label: "Pending Review", variant: "secondary" },
       approved: { label: "Approved",       variant: "default" },
       rejected: { label: "Rejected",       variant: "destructive" },
@@ -312,6 +330,29 @@ const CreatorDashboard = () => {
     };
     const s = map[status] || map.pending;
     return <Badge variant={s.variant} className="text-xs">{s.label}</Badge>;
+  };
+
+  const renderPublishActions = (className = "") => {
+    const currentStatus = editing?.review_status ?? "draft";
+    const isUnpublished = !editing || currentStatus === "draft" || currentStatus === "rejected";
+    return (
+      <div className={`flex flex-wrap gap-2 ${className}`}>
+        {isUnpublished && (
+          <Button variant="outline" onClick={() => handleSave("draft")} className="gap-1.5">
+            <FileText className="h-4 w-4" /> Save as Draft
+          </Button>
+        )}
+        <Button onClick={() => handleSave(isUnpublished ? "pending" : undefined)} className="gap-1.5">
+          {isUnpublished ? <Send className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+          {isUnpublished ? "Submit for Review" : "Save Changes"}
+        </Button>
+        {!isUnpublished && (
+          <Button variant="outline" onClick={() => handleSave("draft")} className="gap-1.5">
+            <EyeOff className="h-4 w-4" /> Unpublish (Save as Draft)
+          </Button>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -329,17 +370,25 @@ const CreatorDashboard = () => {
 
       <div className="flex items-start gap-2 p-3 rounded-lg bg-secondary/50 border border-border text-sm text-muted-foreground">
         <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-        <p>New stories and edits are submitted for admin review before becoming publicly visible.</p>
+        <p>Save a story as a draft to keep working on it privately, or submit it for admin review to publish. Editing an already-published story keeps it live — it won't be sent back for review.</p>
       </div>
 
       {!creating && !editing && !showFullEditor && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
           <div className="p-4 rounded-lg bg-card border border-border">
             <div className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium text-muted-foreground">Total Stories</span>
             </div>
             <p className="text-2xl font-bold mt-1">{stats.total}</p>
+          </div>
+
+          <div className="p-4 rounded-lg bg-card border border-border">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-muted-foreground"></div>
+              <span className="text-sm font-medium text-muted-foreground">Draft</span>
+            </div>
+            <p className="text-2xl font-bold mt-1 text-muted-foreground">{stats.draft}</p>
           </div>
 
           <div className="p-4 rounded-lg bg-card border border-border">
@@ -379,7 +428,10 @@ const CreatorDashboard = () => {
       {(creating || editing) && !showFullEditor && (
         <div className="border border-border rounded-lg bg-card p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold">{editing ? "Edit Story" : "Create Story"}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold">{editing ? "Edit Story" : "Create Story"}</h2>
+              {editing && reviewBadge(editing.review_status ?? "draft")}
+            </div>
             <Button variant="ghost" size="icon" onClick={resetForm}><X className="h-4 w-4" /></Button>
           </div>
 
@@ -390,12 +442,10 @@ const CreatorDashboard = () => {
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               className="bg-background border-border"
             />
-            <Input
-              placeholder="Author name"
-              value={form.author_name}
-              onChange={(e) => setForm({ ...form, author_name: e.target.value })}
-              className="bg-background border-border"
-            />
+            <div className="space-y-1.5">
+              <label className="text-sm text-muted-foreground">Author</label>
+              <Input value={authorDisplayName} disabled className="bg-secondary/50 border-border" />
+            </div>
             <SelectDropdown
               label="Type"
               value={form.type}
@@ -456,9 +506,7 @@ const CreatorDashboard = () => {
             rows={3}
           />
 
-          <Button onClick={handleSave} className="gap-1.5">
-            <Save className="h-4 w-4" />{editing ? "Update" : "Create"}
-          </Button>
+          {renderPublishActions()}
         </div>
       )}
 
@@ -507,6 +555,7 @@ const CreatorDashboard = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All reviews</SelectItem>
+                      <SelectItem value="draft">Draft</SelectItem>
                       <SelectItem value="approved">Approved</SelectItem>
                       <SelectItem value="pending">Pending</SelectItem>
                       <SelectItem value="rejected">Rejected</SelectItem>
@@ -606,6 +655,7 @@ const CreatorDashboard = () => {
                               <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{story.description}</p>
                             </div>
                             <div className="flex gap-2 mt-2 items-center">
+                              {reviewBadge(story.review_status ?? "draft")}
                               <Badge variant="outline" className="capitalize text-xs">{story.status}</Badge>
                               <Badge variant="secondary" className="text-xs">{story.type}</Badge>
                             </div>
@@ -641,6 +691,7 @@ const CreatorDashboard = () => {
                             <h3 className="font-semibold text-sm sm:text-base truncate hover:text-primary">{story.title}</h3>
                             <p className="text-xs sm:text-sm text-muted-foreground truncate">{story.author_name}</p>
                             <div className="flex gap-2 mt-2 items-center">
+                              {reviewBadge(story.review_status ?? "draft")}
                               <Badge variant="outline" className="capitalize text-xs">{story.status}</Badge>
                               <Badge variant="secondary" className="text-xs">{story.type}</Badge>
                             </div>
@@ -702,7 +753,10 @@ const CreatorDashboard = () => {
             
             <div className="border border-border rounded-lg bg-card p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">Edit Story Details</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-bold">Edit Story Details</h2>
+                  {reviewBadge(story.review_status ?? "draft")}
+                </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Input
@@ -711,12 +765,10 @@ const CreatorDashboard = () => {
                   onChange={(e) => setForm({ ...form, title: e.target.value })}
                   className="bg-background border-border"
                 />
-                <Input
-                  placeholder="Author name"
-                  value={form.author_name}
-                  onChange={(e) => setForm({ ...form, author_name: e.target.value })}
-                  className="bg-background border-border"
-                />
+                <div className="space-y-1.5">
+                  <label className="text-sm text-muted-foreground">Author</label>
+                  <Input value={authorDisplayName} disabled className="bg-secondary/50 border-border" />
+                </div>
                 <SelectDropdown
                   label="Type"
                   value={form.type}
@@ -772,11 +824,11 @@ const CreatorDashboard = () => {
                 className="bg-background border-border mt-4"
                 rows={3}
               />
-              <Button onClick={handleSave} className="gap-1.5 mt-4">
-                <Save className="h-4 w-4" />Update Story
-              </Button>
+              {renderPublishActions("mt-4")}
             </div>
-            
+
+            <StoryRelationshipManager storyId={selectedStory} />
+
             <div>
               <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                 {isAnime ? (

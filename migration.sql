@@ -238,6 +238,7 @@ CREATE TABLE IF NOT EXISTS public.reports (
   story_id               uuid          REFERENCES public.stories(id) ON DELETE SET NULL,
   chapter_id             uuid          REFERENCES public.chapters(id) ON DELETE SET NULL,
   episode_id             uuid          REFERENCES public.episodes(id) ON DELETE SET NULL,
+  comment_id             uuid          REFERENCES public.comments(id) ON DELETE SET NULL,
   report_type            report_type   NOT NULL,
   reason                 text          NOT NULL,
   details                text,
@@ -927,6 +928,32 @@ GROUP BY story_id;
 -- ── Cleanup old comment policies if needed ─────────────────────
 DROP POLICY IF EXISTS "Comments readable to all" ON public.comments;
 DROP POLICY IF EXISTS "Admins can delete any comment" ON public.comments;
+
+-- ── Per-content comments: allow a comment to target a specific chapter or episode ──
+ALTER TABLE IF EXISTS public.comments
+ADD COLUMN IF NOT EXISTS chapter_id uuid REFERENCES public.chapters(id) ON DELETE CASCADE,
+ADD COLUMN IF NOT EXISTS episode_id uuid REFERENCES public.episodes(id) ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS idx_comments_chapter_id ON public.comments(chapter_id) WHERE chapter_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_comments_episode_id ON public.comments(episode_id) WHERE episode_id IS NOT NULL;
+
+DO $$ BEGIN
+  ALTER TABLE public.comments
+    ADD CONSTRAINT comments_single_content_target
+    CHECK (NOT (chapter_id IS NOT NULL AND episode_id IS NOT NULL));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- ── Let a creator manage relationships originating from their own stories ──
+DROP POLICY IF EXISTS "story_relationships_manage_own" ON public.story_relationships;
+CREATE POLICY "story_relationships_manage_own"
+  ON public.story_relationships FOR ALL
+  USING (EXISTS (
+    SELECT 1 FROM public.stories WHERE id = source_story_id AND created_by = auth.uid()
+  ))
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM public.stories WHERE id = source_story_id AND created_by = auth.uid()
+  ));
 
 -- ── Done ──────────────────────────────────────────────────────────────────────
 -- Insert your first admin after running:

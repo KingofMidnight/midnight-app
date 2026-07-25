@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider";
 import { sanitizeChapterContent } from "@/utils/sanitize";
+import { saveReadingProgress } from "@/services/progressService";
+import ContentComments from "@/components/ContentComments";
 
 const fonts = [
   { label: "Overpass", value: "'Overpass', sans-serif" },
@@ -64,22 +66,10 @@ const NovelReader = () => {
   }, [storyId, chapterId]);
 
   useEffect(() => {
-    if (!user || !storyId || !chapterId) return;
-    const saveProgress = async () => {
-      try {
-        const { data, error } = await supabase.from("user_progress").upsert(
-          { user_id: user.id, story_id: storyId, last_chapter_id: chapterId },
-          { onConflict: "user_id,story_id" }
-        );
-        if (error) {
-          console.error("Error saving progress:", error);
-        }
-      } catch (err) {
-        console.error("Exception saving progress:", err);
-      }
-    };
-    saveProgress();
-  }, [chapterId, user, storyId]);
+    if (!user || !storyId || !chapterId || chapters.length === 0) return;
+    const isLastChapter = chapters[chapters.length - 1]?.id === chapterId;
+    saveReadingProgress({ userId: user.id, storyId, chapterId, isLastEntry: isLastChapter });
+  }, [chapterId, user, storyId, chapters]);
 
   const currentIdx = chapters.findIndex((c) => c.id === chapterId);
   const prevChap = currentIdx > 0 ? chapters[currentIdx - 1] : null;
@@ -167,6 +157,12 @@ const NovelReader = () => {
       <div className="md:hidden px-4 py-4">
         <GoogleAd slot={import.meta.env.VITE_ADSENSE_NOVEL_MOBILE_BOTTOM} format="horizontal" className="w-full" style={{ minHeight: "90px" }} />
       </div>
+
+      {chapter && (
+        <div className="container mx-auto py-6" style={{ maxWidth: `${maxWidth}px` }}>
+          <ContentComments storyId={chapter.story_id} chapterId={chapter.id} currentUserId={user?.id} title="Chapter Comments" />
+        </div>
+      )}
 
       <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm">
         <div className="container py-3 flex justify-between gap-3">

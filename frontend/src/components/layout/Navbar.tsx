@@ -25,13 +25,20 @@ const Navbar = () => {
     { to: "/profile", label: t.profile, icon: User, requiresAuth: true },
   ];
 
-  const mainNavItems = navItems.filter(item =>
+  const canShowNavItem = (item: (typeof navItems)[number]) => {
+    if (item.requiresAdmin) return isAdmin;
+    if (item.requiresCreator) return isCreator;
+    if (item.requiresAuth) return !!user;
+    return true;
+  };
+
+  const visibleNavItems = navItems.filter(canShowNavItem);
+  const mainNavItems = visibleNavItems.filter(item =>
     !['/creator', '/admin', '/profile'].includes(item.to)
   );
-  const accountNavItems = navItems.filter(item =>
+  const accountNavItems = visibleNavItems.filter(item =>
     ['/creator', '/admin', '/profile'].includes(item.to)
   );
-  const mobileNavItems = [...mainNavItems, ...accountNavItems];
 
   const handleSignOut = async () => {
     await signOut();
@@ -150,7 +157,7 @@ const Navbar = () => {
             </div>
 
             {}
-            {user && accountNavItems.length > 0 && (
+            {accountNavItems.length > 0 && (
               <div className="space-y-1 border-t border-border pt-3">
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-2">Account</h3>
                 {accountNavItems.map((item) => (

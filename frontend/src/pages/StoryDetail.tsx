@@ -9,37 +9,22 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import {
   Star, BookOpen, Image, Tv, ArrowLeft, Play,
-  CheckCircle, MessageSquare,
+  CheckCircle,
 } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import RichTextComment from "@/components/RichTextComment";
-import { ThreadedComments } from "@/components/ThreadedComments";
+import ContentComments from "@/components/ContentComments";
+import StoryRelationships from "@/components/StoryRelationships";
 import ReportDialog from "@/components/ReportDialog";
 import { api } from "@/lib/api";
 import type {
-  Story, Chapter, Episode, CommentWithProfile,
+  Story, Chapter, Episode,
   ListType, StoryType,
 } from "@/types/domain";
 
 type ChapterRow = Pick<Chapter, "id" | "title" | "chapter_number" | "review_status">;
 type EpisodeRow = Pick<Episode, "id" | "title" | "episode_number" | "review_status">;
-
-type CommentNode = CommentWithProfile & {
-  replies: CommentNode[];
-};
-
-interface ThreadedComment {
-  id: string;
-  content: string;
-  userId: string;
-  userName: string;
-  userAvatar?: string;
-  createdAt: string;
-  replies: ThreadedComment[];
-  parentCommentId?: string | null;
-}
 
 const typeIcons: Record<StoryType, typeof BookOpen> = {
   novel: BookOpen,
@@ -54,13 +39,11 @@ const StoryDetail = () => {
   const [story, setStory] = useState<Story | null>(null);
   const [chapters, setChapters] = useState<ChapterRow[]>([]);
   const [episodes, setEpisodes] = useState<EpisodeRow[]>([]);
-  const [comments, setComments] = useState<CommentNode[]>([]);
   const [avgRating, setAvgRating] = useState<number | null>(null);
   const [myRating, setMyRating] = useState(0);
   const [myList, setMyList] = useState<ListType | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
-  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
   const [isFavorited, setIsFavorited] = useState(false);
   const [viewCount, setViewCount] = useState<number>(0);
   const [userProgress, setUserProgress] = useState<{
@@ -68,85 +51,13 @@ const StoryDetail = () => {
     last_episode_id: string | null;
   } | null>(null);
 
-  const buildCommentTree = (flatComments: CommentWithProfile[]): CommentNode[] => {
-    const commentMap = new Map<string, CommentNode>();
-    const roots: CommentNode[] = [];
-
-    flatComments.forEach((comment) => {
-      const node: CommentNode = {
-        ...comment,
-        replies: [],
-      };
-      commentMap.set(comment.id, node);
-    });
-
-    flatComments.forEach((comment) => {
-      const node = commentMap.get(comment.id);
-      if (!node) return;
-      if (comment.parent_comment_id) {
-        const parent = commentMap.get(comment.parent_comment_id);
-        if (parent) {
-          parent.replies.unshift(node);
-          return;
-        }
-      }
-      roots.unshift(node);
-    });
-
-    return roots;
-  };
-
-  const insertCommentNode = (tree: CommentNode[], newComment: CommentNode): CommentNode[] => {
-    if (!newComment.parent_comment_id) {
-      return [newComment, ...tree];
-    }
-
-    return tree.map((node) => {
-      if (node.id === newComment.parent_comment_id) {
-        return {
-          ...node,
-          replies: [newComment, ...node.replies],
-        };
-      }
-      return {
-        ...node,
-        replies: insertCommentNode(node.replies, newComment),
-      };
-    });
-  };
-
-  const removeCommentNode = (tree: CommentNode[], commentId: string): CommentNode[] => {
-    return tree
-      .filter((comment) => comment.id !== commentId)
-      .map((comment) => ({
-        ...comment,
-        replies: removeCommentNode(comment.replies, commentId),
-      }));
-  };
-
-  const flattenCommentTree = (tree: CommentNode[]): number =>
-    tree.reduce((count, comment) => count + 1 + flattenCommentTree(comment.replies), 0);
-
-  const convertToThreadedComment = (tree: CommentNode[]): ThreadedComment[] =>
-    tree.map((comment) => ({
-      id: comment.id,
-      content: comment.content,
-      userId: comment.user_id,
-      userName: comment.profiles?.username ?? "User",
-      userAvatar: comment.profiles?.avatar_url ?? undefined,
-      createdAt: comment.created_at,
-      replies: convertToThreadedComment(comment.replies),
-      parentCommentId: comment.parent_comment_id,
-    }));
-
   useEffect(() => {
     if (!id) return;
     const load = async () => {
-      const [storyRes, chapRes, epRes, commRes, ratingRes] = await Promise.all([
+      const [storyRes, chapRes, epRes, ratingRes] = await Promise.all([
         supabase.from("stories").select("*").eq("id", id).single(),
         supabase.from("chapters").select("id, title, chapter_number, review_status").eq("story_id", id).order("chapter_number"),
         supabase.from("episodes").select("id, title, episode_number, review_status").eq("story_id", id).order("episode_number"),
-        supabase.from("comments").select("*").eq("story_id", id).order("created_at", { ascending: false }),
         supabase.from("ratings").select("rating").eq("story_id", id),
       ]);
 
@@ -156,23 +67,6 @@ const StoryDetail = () => {
       }
       setChapters((chapRes.data ?? []).filter((c) => c.review_status === "approved") as ChapterRow[]);
       setEpisodes((epRes.data ?? []).filter((e) => e.review_status === "approved") as EpisodeRow[]);
-
-      if (commRes.data) {
-        const userIds = [...new Set(commRes.data.map((c) => c.user_id))];
-        const { data: profs } = await supabase
-          .from("profiles")
-          .select("id, username, avatar_url")
-          .in("id", userIds);
-        const profMap: Record<string, { username: string | null; avatar_url: string | null }> = {};
-        profs?.forEach((p) => { profMap[p.id] = p; });
-
-        const flatComments = commRes.data.map((c) => ({
-          ...c,
-          profiles: profMap[c.user_id] ?? null,
-        })) as CommentWithProfile[];
-
-        setComments(buildCommentTree(flatComments));
-      }
 
       if (ratingRes.data?.length) {
         const avg = ratingRes.data.reduce((a, r) => a + r.rating, 0) / ratingRes.data.length;
@@ -224,64 +118,6 @@ const StoryDetail = () => {
       );
       setMyList(val as ListType);
     }
-  };
-
-  const handleComment = async (html: string) => {
-    if (!user || !id || !html.trim()) return;
-    const { data, error } = await supabase
-      .from("comments")
-      .insert({ user_id: user.id, story_id: id, content: html, parent_comment_id: null })
-      .select("*")
-      .single();
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-      return;
-    }
-
-    if (!data) return;
-
-    const { data: prof } = await supabase.from("profiles").select("id, username, avatar_url").eq("id", user.id).single();
-    const newComment: CommentNode = {
-      ...data,
-      profiles: prof ?? null,
-      replies: [],
-    };
-    setComments((prev) => insertCommentNode(prev, newComment));
-  };
-
-  const handleCommentAdded = (comment: {
-    id: string;
-    content: string;
-    userId: string;
-    userName: string;
-    userAvatar?: string;
-    createdAt: string;
-    parentCommentId?: string | null;
-  }) => {
-    const newComment: CommentNode = {
-      id: comment.id,
-      content: comment.content,
-      user_id: comment.userId,
-      story_id: id ?? "",
-      created_at: comment.createdAt,
-      updated_at: null,
-      parent_comment_id: comment.parentCommentId ?? null,
-      profiles: { username: comment.userName, avatar_url: comment.userAvatar ?? null },
-      replies: [],
-    };
-
-    setComments((prev) => insertCommentNode(prev, newComment));
-  };
-
-  const handleDeleteComment = async (commentId: string) => {
-    setDeletingCommentId(commentId);
-    const { error } = await supabase.from("comments").delete().eq("id", commentId);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      setComments((prev) => removeCommentNode(prev, commentId));
-    }
-    setDeletingCommentId(null);
   };
 
   const handleExportEpub = async () => {
@@ -364,8 +200,6 @@ const StoryDetail = () => {
 
   const viewedChapterIds = getViewedChapterIds();
   const viewedEpisodeIds = getViewedEpisodeIds();
-  const commentCount = flattenCommentTree(comments);
-  const threadedComments = convertToThreadedComment(comments);
 
   return (
     <div className="min-h-screen">
@@ -389,17 +223,15 @@ const StoryDetail = () => {
                 <Badge variant="outline" className="capitalize">{story.content_origin}</Badge>
               </div>
               <h1 className="text-3xl font-bold">{story.title}</h1>
-              {story.author_name && (
-                story.created_by ? (
-                  <p className="text-muted-foreground">
-                    by{" "}
-                    <Link to={`/profile/${story.created_by}`} className="hover:text-primary transition-colors underline underline-offset-2">
-                      {story.author_name}
-                    </Link>
-                  </p>
-                ) : (
-                  <p className="text-muted-foreground">by {story.author_name}</p>
-                )
+              {story.created_by ? (
+                <p className="text-muted-foreground">
+                  by{" "}
+                  <Link to={`/profile/${story.created_by}`} className="hover:text-primary transition-colors underline underline-offset-2">
+                    {story.author_name || "Unknown author"}
+                  </Link>
+                </p>
+              ) : (
+                story.author_name && <p className="text-muted-foreground">by {story.author_name}</p>
               )}
               {story.description && (
                 <p className="text-muted-foreground text-sm leading-relaxed max-w-2xl">{story.description}</p>
@@ -555,26 +387,9 @@ const StoryDetail = () => {
           </section>
         )}
 
-        <section>
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <MessageSquare className="h-5 w-5 text-primary" /> Comments ({commentCount})
-          </h2>
-          {user && (
-            <div className="mb-6">
-              <RichTextComment onSubmit={handleComment} />
-            </div>
-          )}
-          <div className="space-y-3">
-            <ThreadedComments
-              storyId={id}
-              comments={threadedComments}
-              currentUserId={user?.id}
-              onCommentAdded={handleCommentAdded}
-              onDeleteComment={handleDeleteComment}
-            />
-            {commentCount === 0 && <p className="text-muted-foreground text-sm">Be the first to leave a comment.</p>}
-          </div>
-        </section>
+        {story && <StoryRelationships storyId={story.id} />}
+
+        {id && <ContentComments storyId={id} currentUserId={user?.id} />}
       </div>
     </div>
   );

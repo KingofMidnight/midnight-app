@@ -61,16 +61,16 @@ const ContentCard = ({ story }: { story: StoryCardData }) => {
         <h3 className="font-semibold text-xs sm:text-sm leading-tight line-clamp-2 text-foreground group-hover:text-primary transition-colors">
           {story.title}
         </h3>
-        {story.author_name && (
-          story.created_by ? (
-            <Link
-              to={`/profile/${story.created_by}`}
-              onClick={(e) => e.stopPropagation()}
-              className="text-xs text-muted-foreground truncate hover:text-primary transition-colors"
-            >
-              {story.author_name}
-            </Link>
-          ) : (
+        {story.created_by ? (
+          <Link
+            to={`/profile/${story.created_by}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-xs text-muted-foreground truncate hover:text-primary transition-colors"
+          >
+            {story.author_name || "Unknown author"}
+          </Link>
+        ) : (
+          story.author_name && (
             <p className="text-xs text-muted-foreground truncate">{story.author_name}</p>
           )
         )}

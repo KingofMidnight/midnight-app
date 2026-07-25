@@ -176,7 +176,7 @@ const AdminReports = () => {
     const storyIds     = [...new Set(rawReports.map((r) => r.story_id).filter(Boolean))];
     const chapterIds   = [...new Set(rawReports.map((r) => r.chapter_id).filter(Boolean))];
     const episodeIds   = [...new Set(rawReports.map((r) => r.episode_id).filter(Boolean))];
-    const commentIds   = [...new Set(rawReports.map((r) => (r as any).comment_id).filter(Boolean))];
+    const commentIds   = [...new Set(rawReports.map((r) => r.comment_id).filter(Boolean))];
 
     const allProfileIds = [...new Set([...reporterIds, ...reportedIds])];
 

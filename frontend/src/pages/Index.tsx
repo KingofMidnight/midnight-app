@@ -16,12 +16,21 @@ const contentSections = [
   { key: "anime", label: siteContent.categories.anime, icon: Tv, filter: "anime" },
 ];
 
+interface ContinueReadingEntry {
+  id: string;
+  last_chapter_id: string | null;
+  last_episode_id: string | null;
+  stories: any;
+  chapters: { chapter_number: number } | null;
+  episodes: { episode_number: number } | null;
+}
+
 const Index = () => {
   const { user } = useAuth();
   const [stories, setStories] = useState<any[]>([]);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [sectionStories, setSectionStories] = useState<any[]>([]);
-  const [continueReading, setContinueReading] = useState<any[]>([]);
+  const [continueReading, setContinueReading] = useState<ContinueReadingEntry[]>([]);
 
   useEffect(() => {
     const load = async () => {
@@ -39,12 +48,12 @@ const Index = () => {
     const loadProgress = async () => {
       const { data: progress } = await supabase
         .from("user_progress")
-        .select("*, stories(*)")
+        .select("*, stories(*), chapters(chapter_number), episodes(episode_number)")
         .eq("user_id", user.id)
         .order("updated_at", { ascending: false })
         .limit(6);
       if (progress) {
-        setContinueReading(progress.filter((p: any) => p.stories));
+        setContinueReading((progress as unknown as ContinueReadingEntry[]).filter((p) => p.stories));
       }
     };
     loadProgress();
@@ -76,7 +85,7 @@ const Index = () => {
 
   const t = siteContent;
 
-  const getResumeLink = (progress: any) => {
+  const getResumeLink = (progress: ContinueReadingEntry) => {
     const story = progress.stories;
     const isAnime = ["anime", "cartoon", "audiobook"].includes(story.type);
     if (isAnime && progress.last_episode_id) {
@@ -88,6 +97,12 @@ const Index = () => {
         : `/read/manga/${story.id}/${progress.last_chapter_id}`;
     }
     return `/story/${story.id}`;
+  };
+
+  const getProgressLabel = (progress: ContinueReadingEntry) => {
+    if (progress.episodes) return `Episode ${progress.episodes.episode_number}`;
+    if (progress.chapters) return `Chapter ${progress.chapters.chapter_number}`;
+    return null;
   };
 
   return (
@@ -124,7 +139,7 @@ const Index = () => {
             </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            {continueReading.map((progress: any) => (
+            {continueReading.map((progress) => (
               <Link
                 key={progress.id}
                 to={getResumeLink(progress)}
@@ -144,7 +159,9 @@ const Index = () => {
                 </div>
                 <div className="p-2.5">
                   <p className="text-sm font-medium truncate">{progress.stories.title}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{progress.stories.type}</p>
+                  <p className="text-xs text-muted-foreground capitalize">
+                    {getProgressLabel(progress) ?? progress.stories.type}
+                  </p>
                 </div>
               </Link>
             ))}
