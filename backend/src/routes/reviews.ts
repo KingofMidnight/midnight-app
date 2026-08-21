@@ -45,7 +45,7 @@ router.post("/", requireAuth, async (req: Request, res: Response): Promise<void>
 
     if (error) throw error;
 
-    res.status(201).json({ success: true, review: data[0] });
+    res.status(201).json({ success: true, review: data?.[0] ?? null });
   } catch (error) {
     res.status(400).json({ success: false, error: "Invalid request." });
   }
@@ -96,7 +96,7 @@ router.patch("/:reviewId", requireAuth, async (req: Request, res: Response): Pro
 
     if (error) throw error;
 
-    res.json({ success: true, review: data[0] });
+    res.json({ success: true, review: data?.[0] ?? null });
   } catch (error) {
     res.status(400).json({ success: false, error: "Invalid request." });
   }

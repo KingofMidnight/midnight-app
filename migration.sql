@@ -173,9 +173,13 @@ CREATE TABLE IF NOT EXISTS public.comments (
   story_id   uuid        NOT NULL REFERENCES public.stories(id) ON DELETE CASCADE,
   user_id    uuid        NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   content    text        NOT NULL,
+  chapter_id uuid        REFERENCES public.chapters(id) ON DELETE CASCADE,
+  episode_id uuid        REFERENCES public.episodes(id) ON DELETE CASCADE,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS idx_comments_chapter_id ON public.comments(chapter_id);
+CREATE INDEX IF NOT EXISTS idx_comments_episode_id ON public.comments(episode_id);
 
 -- ── ratings ───────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.ratings (

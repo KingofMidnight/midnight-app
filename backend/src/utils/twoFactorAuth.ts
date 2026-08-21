@@ -55,7 +55,7 @@ const base32Decode = (input: string): Buffer => {
 const generateTOTPToken = (secret: string): string => {
   const decodedSecret = base32Decode(secret);
   const now = Math.floor(Date.now() / 1000);
-  const timeCounter = Math.floor(now / 30);
+  let timeCounter = Math.floor(now / 30);
   const buffer = Buffer.alloc(8);
 
   for (let i = 7; i >= 0; i--) {

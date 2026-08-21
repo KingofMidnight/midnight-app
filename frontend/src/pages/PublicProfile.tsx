@@ -65,7 +65,7 @@ const PublicProfile = () => {
           .select("id")
           .eq("creator_user_id", id)
           .eq("follower_user_id", currentUser.id)
-          .single();
+          .maybeSingle();
         setIsFollowing(!!isFollowingRes.data);
       }
 

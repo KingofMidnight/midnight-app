@@ -1,4 +1,4 @@
-﻿import { Link } from "react-router-dom";
+﻿import { Link, useNavigate } from "react-router-dom";
 import { BookOpen, Image, Tv, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -28,10 +28,21 @@ export interface StoryCardData {
 
 const ContentCard = ({ story }: { story: StoryCardData }) => {
   const Icon = typeIcons[story.type] || BookOpen;
+  const navigate = useNavigate();
+  // Rendered as a div (not <a>) because it can contain a nested author <Link>;
+  // nesting <a> inside <a> is invalid HTML and breaks click behavior in real browsers.
   return (
-    <Link
-      to={`/story/${story.id}`}
-      className="group block rounded-lg overflow-hidden bg-card border border-border transition-colors duration-200 hover:border-primary/40"
+    <div
+      role="link"
+      tabIndex={0}
+      onClick={() => navigate(`/story/${story.id}`)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          navigate(`/story/${story.id}`);
+        }
+      }}
+      className="group block rounded-lg overflow-hidden bg-card border border-border transition-colors duration-200 hover:border-primary/40 cursor-pointer"
     >
       <div className="aspect-[3/4] bg-secondary relative overflow-hidden">
         {story.cover_image_url ? (
@@ -78,7 +89,7 @@ const ContentCard = ({ story }: { story: StoryCardData }) => {
           {story.status}
         </span>
       </div>
-    </Link>
+    </div>
   );
 };
 
