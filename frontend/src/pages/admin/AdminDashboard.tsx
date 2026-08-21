@@ -75,7 +75,7 @@ const AdminDashboard = () => {
         const pendingCount = await supabase.from("stories").select("id", { count: "exact" }).eq("review_status", "pending");
         const usersCount = await supabase.from("profiles").select("id", { count: "exact" });
         const reportsCount = await supabase.from("reports").select("id", { count: "exact" });
-        const bansCount = await supabase.from("bans").select("id", { count: "exact" });
+        const bansCount = await supabase.from("user_bans").select("id", { count: "exact" }).eq("is_active", true);
 
         setStats({
           totalStories: storiesCount.count ?? 0,

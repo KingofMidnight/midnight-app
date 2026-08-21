@@ -99,8 +99,6 @@ export async function validateImageContent(buffer: Buffer): Promise<{ valid: boo
       return { valid: false, error: `Unsupported image format: ${metadata.format}` };
     }
     
-    const info = await sharp(buffer).info();
-    
     if (metadata.width && (metadata.width < 1 || metadata.width > 10000)) {
       return { valid: false, error: 'Invalid image dimensions' };
     }
