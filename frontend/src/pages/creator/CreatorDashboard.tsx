@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Edit, Save, X, AlertCircle, Search, Eye, BarChart3, List, LayoutGrid, Rows3, Image, Heart, BookOpen, Tv, Play, FileText, EyeOff, Send } from "lucide-react";
+import { Plus, Trash2, Edit, Save, X, AlertCircle, Search, Eye, BarChart3, List, LayoutGrid, Rows3, Image, Heart, BookOpen, Tv, Play, FileText, EyeOff, Send, GitBranch } from "lucide-react";
 import { Link } from "react-router-dom";
 import ImageUpload from "@/components/ImageUpload";
 import { Switch } from "@/components/ui/switch";
@@ -20,6 +20,7 @@ import ContentEditor from "@/components/ContentEditor";
 import AnimeContentEditor from "@/components/AnimeContentEditor";
 import ContentCard from "@/components/ContentCard";
 import StoryRelationshipManager from "@/components/StoryRelationshipManager";
+import StoryMap from "@/components/StoryMap";
 
 const storyTypes = [
   { value: "novel", label: "Novel" },
@@ -866,6 +867,19 @@ const CreatorDashboard = () => {
                 <ContentEditor storyId={selectedStory} storyType={story.type} isCreatorMode isCyoa={story.is_cyoa} />
               )}
             </div>
+
+            {!isAnime && story.is_cyoa && (
+              <div>
+                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <GitBranch className="h-5 w-5 text-primary" /> Story Map
+                </h3>
+                <StoryMap
+                  storyId={selectedStory}
+                  showStatusBadges
+                  emptyHint="Add branch choices in the chapters above to see them mapped out here."
+                />
+              </div>
+            )}
           </div>
         );
       })()}
