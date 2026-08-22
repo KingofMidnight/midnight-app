@@ -149,7 +149,7 @@ export const api = {
   sessionSecurity: {
     async terminateAllSessions(): Promise<{ success: boolean; message: string }> {
       const jwt = await getJwt();
-      const res = await fetch(`${BASE_URL}/api/session-security/terminate-all`, {
+      const res = await fetch(`${BASE_URL}/api/session-security/session/terminate-all`, {
         method: "POST",
         headers: { 
           Authorization: `Bearer ${jwt}`,
@@ -168,14 +168,13 @@ export const api = {
 
   views: {
     async record(storyId: string): Promise<number> {
-      const res = await fetch(`${BASE_URL}/api/views/record`, {
+      const res = await fetch(`${BASE_URL}/api/views/stories/${storyId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ story_id: storyId }),
       });
-      const json = await res.json() as { success: boolean; data?: { count: number }; error?: string };
+      const json = await res.json() as { success: boolean; data?: { view_count: number }; error?: string };
       if (!json.success) throw new Error(json.error ?? "Failed to record view.");
-      return json.data?.count ?? 0;
+      return json.data?.view_count ?? 0;
     },
   },
 };
