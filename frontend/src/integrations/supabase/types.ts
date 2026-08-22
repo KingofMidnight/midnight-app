@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -7,19 +7,62 @@
   | Json[]
 
 export type Database = {
-
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
+      chapter_choices: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          sort_order: number
+          source_chapter_id: string
+          target_chapter_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          sort_order?: number
+          source_chapter_id: string
+          target_chapter_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          sort_order?: number
+          source_chapter_id?: string
+          target_chapter_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chapter_choices_source_chapter_id_fkey"
+            columns: ["source_chapter_id"]
+            isOneToOne: false
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chapter_choices_target_chapter_id_fkey"
+            columns: ["target_chapter_id"]
+            isOneToOne: false
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chapters: {
         Row: {
           chapter_number: number
           content: string | null
           created_at: string
           id: string
-          image_urls: string[] | null
+          image_urls: string[]
           review_status: string
           story_id: string
           title: string
@@ -30,7 +73,7 @@ export type Database = {
           content?: string | null
           created_at?: string
           id?: string
-          image_urls?: string[] | null
+          image_urls?: string[]
           review_status?: string
           story_id: string
           title: string
@@ -41,7 +84,7 @@ export type Database = {
           content?: string | null
           created_at?: string
           id?: string
-          image_urls?: string[] | null
+          image_urls?: string[]
           review_status?: string
           story_id?: string
           title?: string
@@ -96,13 +139,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "comments_story_id_fkey"
-            columns: ["story_id"]
-            isOneToOne: false
-            referencedRelation: "stories"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "comments_chapter_id_fkey"
             columns: ["chapter_id"]
             isOneToOne: false
@@ -123,26 +159,40 @@ export type Database = {
             referencedRelation: "comments"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "comments_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       creator_followers: {
         Row: {
-          id: string
           creator_user_id: string
+          followed_at: string | null
           follower_user_id: string
-          followed_at: string
+          id: string
         }
         Insert: {
-          id?: string
           creator_user_id: string
+          followed_at?: string | null
           follower_user_id: string
-          followed_at?: string
+          id?: string
         }
         Update: {
-          id?: string
           creator_user_id?: string
+          followed_at?: string | null
           follower_user_id?: string
-          followed_at?: string
+          id?: string
         }
         Relationships: []
       }
@@ -220,6 +270,13 @@ export type Database = {
             referencedRelation: "stories"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "hidden_stories_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       notifications: {
@@ -253,7 +310,15 @@ export type Database = {
           type?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -263,7 +328,7 @@ export type Database = {
           display_name: string | null
           id: string
           show_created_content: boolean
-          show_favorites: boolean
+          show_favorites: boolean | null
           show_lists: boolean
           updated_at: string
           username: string | null
@@ -275,7 +340,7 @@ export type Database = {
           display_name?: string | null
           id: string
           show_created_content?: boolean
-          show_favorites?: boolean
+          show_favorites?: boolean | null
           show_lists?: boolean
           updated_at?: string
           username?: string | null
@@ -287,7 +352,7 @@ export type Database = {
           display_name?: string | null
           id?: string
           show_created_content?: boolean
-          show_favorites?: boolean
+          show_favorites?: boolean | null
           show_lists?: boolean
           updated_at?: string
           username?: string | null
@@ -325,6 +390,13 @@ export type Database = {
             columns: ["story_id"]
             isOneToOne: false
             referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ratings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -424,57 +496,113 @@ export type Database = {
           },
         ]
       }
+      reviews: {
+        Row: {
+          content: string
+          created_at: string
+          helpful_count: number | null
+          id: string
+          is_approved: boolean | null
+          rating: number | null
+          story_id: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          helpful_count?: number | null
+          id?: string
+          is_approved?: boolean | null
+          rating?: number | null
+          story_id: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          helpful_count?: number | null
+          id?: string
+          is_approved?: boolean | null
+          rating?: number | null
+          story_id?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviews_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stories: {
         Row: {
           author_name: string | null
+          average_rating: number | null
           content_origin: Database["public"]["Enums"]["content_origin"]
+          content_rating: Database["public"]["Enums"]["content_rating"]
           cover_image_url: string | null
           created_at: string
           created_by: string | null
           description: string | null
-          genres: string[] | null
+          genres: string[]
           id: string
+          is_cyoa: boolean
           review_status: string
           status: Database["public"]["Enums"]["story_status"]
-          tags: string[] | null
+          tags: string[]
           title: string
           type: Database["public"]["Enums"]["story_type"]
           updated_at: string
-          view_count: number | null
+          view_count: number
         }
         Insert: {
           author_name?: string | null
+          average_rating?: number | null
           content_origin?: Database["public"]["Enums"]["content_origin"]
+          content_rating?: Database["public"]["Enums"]["content_rating"]
           cover_image_url?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
-          genres?: string[] | null
+          genres?: string[]
           id?: string
+          is_cyoa?: boolean
           review_status?: string
           status?: Database["public"]["Enums"]["story_status"]
-          tags?: string[] | null
+          tags?: string[]
           title: string
           type: Database["public"]["Enums"]["story_type"]
           updated_at?: string
-          view_count?: number | null
+          view_count?: number
         }
         Update: {
           author_name?: string | null
+          average_rating?: number | null
           content_origin?: Database["public"]["Enums"]["content_origin"]
+          content_rating?: Database["public"]["Enums"]["content_rating"]
           cover_image_url?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
-          genres?: string[] | null
+          genres?: string[]
           id?: string
+          is_cyoa?: boolean
           review_status?: string
           status?: Database["public"]["Enums"]["story_status"]
-          tags?: string[] | null
+          tags?: string[]
           title?: string
           type?: Database["public"]["Enums"]["story_type"]
           updated_at?: string
-          view_count?: number | null
+          view_count?: number
         }
         Relationships: []
       }
@@ -517,6 +645,65 @@ export type Database = {
           },
         ]
       }
+      story_views: {
+        Row: {
+          id: string
+          ip_address: string
+          story_id: string
+          viewed_at: string
+        }
+        Insert: {
+          id?: string
+          ip_address: string
+          story_id: string
+          viewed_at?: string
+        }
+        Update: {
+          id?: string
+          ip_address?: string
+          story_id?: string
+          viewed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_views_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_2fa_secrets: {
+        Row: {
+          backup_codes: string[]
+          created_at: string
+          id: string
+          is_enabled: boolean | null
+          secret: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          backup_codes?: string[]
+          created_at?: string
+          id?: string
+          is_enabled?: boolean | null
+          secret: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          backup_codes?: string[]
+          created_at?: string
+          id?: string
+          is_enabled?: boolean | null
+          secret?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_bans: {
         Row: {
           banned_at: string
@@ -550,24 +737,48 @@ export type Database = {
         }
         Relationships: []
       }
-      user_favorites: {
+      user_blocks: {
         Row: {
-          id: string
-          user_id: string
-          story_id: string
+          blocked_id: string
+          blocker_id: string
           created_at: string
+          id: string
+          reason: string | null
         }
         Insert: {
-          id?: string
-          user_id: string
-          story_id: string
+          blocked_id: string
+          blocker_id: string
           created_at?: string
+          id?: string
+          reason?: string | null
         }
         Update: {
-          id?: string
-          user_id?: string
-          story_id?: string
+          blocked_id?: string
+          blocker_id?: string
           created_at?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: []
+      }
+      user_favorites: {
+        Row: {
+          created_at: string | null
+          id: string
+          story_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          story_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          story_id?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -607,6 +818,13 @@ export type Database = {
             columns: ["story_id"]
             isOneToOne: false
             referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_lists_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -658,6 +876,13 @@ export type Database = {
             referencedRelation: "stories"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "user_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
         ]
       }
       user_roles: {
@@ -681,9 +906,59 @@ export type Database = {
         }
         Relationships: []
       }
+      user_sessions: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          ip_address: string | null
+          is_active: boolean | null
+          last_activity: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          ip_address?: string | null
+          is_active?: boolean | null
+          last_activity?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          ip_address?: string | null
+          is_active?: boolean | null
+          last_activity?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
-      [_ in never]: never
+      story_ratings_summary: {
+        Row: {
+          average_rating: number | null
+          max_rating: number | null
+          min_rating: number | null
+          rating_count: number | null
+          story_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ratings_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       has_role: {
@@ -693,6 +968,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_story_view_count: {
+        Args: { story_id_input: string }
+        Returns: undefined
+      }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_creator: { Args: { _user_id: string }; Returns: boolean }
       is_moderator: { Args: { _user_id: string }; Returns: boolean }
@@ -700,6 +979,7 @@ export type Database = {
     Enums: {
       app_role: "admin" | "moderator" | "user" | "creator"
       content_origin: "original" | "fanfiction"
+      content_rating: "safe" | "suggestive" | "mature" | "explicit"
       list_type: "reading" | "completed" | "plan_to_read"
       relationship_type:
         | "adapts"
@@ -713,7 +993,10 @@ export type Database = {
       story_type:
         | "novel"
         | "manga"
+        | "comic"
         | "anime"
+        | "cartoon"
+        | "audiobook"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -843,6 +1126,7 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "moderator", "user", "creator"],
       content_origin: ["original", "fanfiction"],
+      content_rating: ["safe", "suggestive", "mature", "explicit"],
       list_type: ["reading", "completed", "plan_to_read"],
       relationship_type: [
         "adapts",
@@ -854,8 +1138,7 @@ export const Constants = {
       report_status: ["pending", "reviewing", "resolved", "dismissed"],
       report_type: ["content", "user", "dmca"],
       story_status: ["ongoing", "completed", "hiatus"],
-      story_type: ["novel", "manga", "anime"],
+      story_type: ["novel", "manga", "comic", "anime", "cartoon", "audiobook"],
     },
   },
 } as const
-

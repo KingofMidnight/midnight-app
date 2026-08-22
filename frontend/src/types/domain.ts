@@ -37,6 +37,9 @@ export type Notification = Database["public"]["Tables"]["notifications"]["Row"];
 export type HiddenStory  = Database["public"]["Tables"]["hidden_stories"]["Row"];
 export type StoryRelationship = Database["public"]["Tables"]["story_relationships"]["Row"];
 
+export type ChapterChoice       = Database["public"]["Tables"]["chapter_choices"]["Row"];
+export type ChapterChoiceInsert = Database["public"]["Tables"]["chapter_choices"]["Insert"];
+
 export interface UserFavorite {
   id: string;
   user_id: string;

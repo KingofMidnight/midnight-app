@@ -13,6 +13,7 @@ import {
 import { Plus, Trash2, Edit, Save, X, AlertCircle, Search, Eye, BarChart3, List, LayoutGrid, Rows3, Image, Heart, BookOpen, Tv, Play, FileText, EyeOff, Send } from "lucide-react";
 import { Link } from "react-router-dom";
 import ImageUpload from "@/components/ImageUpload";
+import { Switch } from "@/components/ui/switch";
 import FilteredTagInput from "@/components/FilteredTagInput";
 import SelectDropdown from "@/components/SelectDropdown";
 import ContentEditor from "@/components/ContentEditor";
@@ -132,6 +133,7 @@ const CreatorDashboard = () => {
     genres: [] as string[],
     tags: [] as string[],
     cover_image_url: "",
+    is_cyoa: false,
   });
 
   const loadStories = async () => {
@@ -227,7 +229,7 @@ const CreatorDashboard = () => {
   const resetForm = () => {
     setForm({
       title: "", description: "", type: "novel", status: "ongoing",
-      content_origin: "unset", genres: [], tags: [], cover_image_url: "",
+      content_origin: "unset", genres: [], tags: [], cover_image_url: "", is_cyoa: false,
     });
     setEditing(null);
     setCreating(false);
@@ -243,6 +245,7 @@ const CreatorDashboard = () => {
       genres: story.genres || [],
       tags: story.tags || [],
       cover_image_url: story.cover_image_url || "",
+      is_cyoa: story.is_cyoa || false,
     });
     setEditing(story);
     setCreating(false);
@@ -263,6 +266,7 @@ const CreatorDashboard = () => {
       tags: form.tags,
       cover_image_url: form.cover_image_url || null,
       created_by: user.id,
+      is_cyoa: form.is_cyoa,
     };
     if (targetStatus) payload.review_status = targetStatus;
 
@@ -470,6 +474,16 @@ const CreatorDashboard = () => {
                 searchable={false}
               />
             </div>
+
+            {form.type !== "anime" && (
+              <div className="sm:col-span-2 flex items-center justify-between p-3 rounded-lg border border-border bg-secondary/30">
+                <div>
+                  <p className="text-sm font-medium">CYOA Branching</p>
+                  <p className="text-xs text-muted-foreground">Let chapters end with reader choices that lead to different chapters.</p>
+                </div>
+                <Switch checked={form.is_cyoa} onCheckedChange={(v) => setForm({ ...form, is_cyoa: v })} />
+              </div>
+            )}
 
             <div className="sm:col-span-2">
               <ImageUpload
@@ -792,6 +806,15 @@ const CreatorDashboard = () => {
                     searchable={false}
                   />
                 </div>
+                {form.type !== "anime" && (
+                  <div className="sm:col-span-2 flex items-center justify-between p-3 rounded-lg border border-border bg-secondary/30">
+                    <div>
+                      <p className="text-sm font-medium">CYOA Branching</p>
+                      <p className="text-xs text-muted-foreground">Let chapters end with reader choices that lead to different chapters.</p>
+                    </div>
+                    <Switch checked={form.is_cyoa} onCheckedChange={(v) => setForm({ ...form, is_cyoa: v })} />
+                  </div>
+                )}
                 <div className="sm:col-span-2">
                   <ImageUpload
                     bucket="covers"
@@ -840,7 +863,7 @@ const CreatorDashboard = () => {
               {isAnime ? (
                 <AnimeContentEditor storyId={selectedStory} isCreatorMode />
               ) : (
-                <ContentEditor storyId={selectedStory} storyType={story.type} isCreatorMode />
+                <ContentEditor storyId={selectedStory} storyType={story.type} isCreatorMode isCyoa={story.is_cyoa} />
               )}
             </div>
           </div>

@@ -3,13 +3,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2, Edit, X, GripVertical, FileText, Globe } from "lucide-react";
+import { Plus, Trash2, Edit, X, GripVertical, FileText, Globe, GitBranch } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import Quill, { Parchment } from "quill";
 import "quill/dist/quill.snow.css";
 import MultiImageUpload from "@/components/MultiImageUpload";
-import type { Chapter, StoryType } from "@/types/domain";
+import type { Chapter, ChapterChoice, StoryType } from "@/types/domain";
 import { sanitizeAdminContent } from "@/utils/sanitize";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 const FONT_WHITELIST = [
   "serif",
@@ -29,6 +32,7 @@ interface Props {
   storyId: string;
   storyType: StoryType;
   isCreatorMode?: boolean;
+  isCyoa?: boolean;
 }
 
 type DraftStatus = "draft" | "approved";
@@ -128,7 +132,7 @@ const QUILL_STYLES = `
   .chapter-quill .ql-lineheight span[data-value="2.5"]::before { content: "Wide (2.5×)"; }
 `;
 
-const ContentEditor = ({ storyId, storyType, isCreatorMode = false }: Props) => {
+const ContentEditor = ({ storyId, storyType, isCreatorMode = false, isCyoa = false }: Props) => {
   const { toast } = useToast();
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [editing, setEditing] = useState<Chapter | null>(null);
@@ -139,6 +143,9 @@ const ContentEditor = ({ storyId, storyType, isCreatorMode = false }: Props) => 
   const [draftStatus, setDraftStatus] = useState<DraftStatus>("draft");
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const [choices, setChoices] = useState<ChapterChoice[]>([]);
+  const [newChoiceLabel, setNewChoiceLabel] = useState("");
+  const [newChoiceTarget, setNewChoiceTarget] = useState("");
 
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const quillRef = useRef<Quill | null>(null);
@@ -212,6 +219,25 @@ const ContentEditor = ({ storyId, storyType, isCreatorMode = false }: Props) => 
 
   useEffect(() => { loadChapters(); }, [loadChapters]);
 
+  const loadChoices = useCallback(async (chapterId: string) => {
+    const { data } = await supabase
+      .from("chapter_choices")
+      .select("*")
+      .eq("source_chapter_id", chapterId)
+      .order("sort_order");
+    setChoices(data ?? []);
+  }, []);
+
+  useEffect(() => {
+    if (isCyoa && editing?.id) {
+      loadChoices(editing.id);
+    } else {
+      setChoices([]);
+    }
+    setNewChoiceLabel("");
+    setNewChoiceTarget("");
+  }, [isCyoa, editing?.id, loadChoices]);
+
   const resetForm = () => {
     setEditing(null);
     setCreating(false);
@@ -228,6 +254,26 @@ const ContentEditor = ({ storyId, storyType, isCreatorMode = false }: Props) => 
     setImageUrls(ch.image_urls ?? []);
     setContent(ch.content ?? "");
     setDraftStatus(ch.review_status === "approved" ? "approved" : "draft");
+  };
+
+  const handleAddChoice = async () => {
+    if (!editing || !newChoiceLabel.trim() || !newChoiceTarget) return;
+    const { error } = await supabase.from("chapter_choices").insert({
+      source_chapter_id: editing.id,
+      target_chapter_id: newChoiceTarget,
+      label: newChoiceLabel.trim(),
+      sort_order: choices.length,
+    });
+    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+    setNewChoiceLabel("");
+    setNewChoiceTarget("");
+    loadChoices(editing.id);
+  };
+
+  const handleDeleteChoice = async (id: string) => {
+    if (!editing) return;
+    await supabase.from("chapter_choices").delete().eq("id", id);
+    loadChoices(editing.id);
   };
 
   const handleSave = async (overrideStatus?: DraftStatus) => {
@@ -376,6 +422,66 @@ const ContentEditor = ({ storyId, storyType, isCreatorMode = false }: Props) => 
               {editing ? "Publish" : "Publish Now"}
             </Button>
           </div>
+
+          {isCyoa && (
+            <div className="border-t border-border pt-4 space-y-3">
+              <h5 className="text-sm font-semibold flex items-center gap-1.5">
+                <GitBranch className="h-4 w-4 text-primary" /> Branch Choices
+              </h5>
+              {!editing ? (
+                <p className="text-xs text-muted-foreground">
+                  Save this chapter first, then reopen it to add the choices readers pick from at the end.
+                </p>
+              ) : (
+                <>
+                  {choices.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No choices yet — readers will see "Back to Story" at the end of this chapter.
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {choices.map((choice) => {
+                        const target = chapters.find((c) => c.id === choice.target_chapter_id);
+                        return (
+                          <div key={choice.id} className="flex items-center justify-between gap-2 p-2 rounded-md bg-secondary/40 text-sm">
+                            <span>
+                              <span className="font-medium">{choice.label}</span>
+                              <span className="text-muted-foreground"> → Ch. {target?.chapter_number ?? "?"}: {target?.title ?? "Unknown chapter"}</span>
+                            </span>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive shrink-0" onClick={() => handleDeleteChoice(choice.id)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Input
+                      placeholder="Choice text readers will see..."
+                      value={newChoiceLabel}
+                      onChange={(e) => setNewChoiceLabel(e.target.value)}
+                      className="bg-background border-border"
+                    />
+                    <Select value={newChoiceTarget} onValueChange={setNewChoiceTarget}>
+                      <SelectTrigger className="bg-background border-border sm:w-56">
+                        <SelectValue placeholder="Leads to chapter..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {chapters.filter((c) => c.id !== editing.id).map((c) => (
+                          <SelectItem key={c.id} value={c.id}>Ch. {c.chapter_number}: {c.title}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button variant="outline" onClick={handleAddChoice} disabled={!newChoiceLabel.trim() || !newChoiceTarget} className="gap-1.5 shrink-0">
+                      <Plus className="h-4 w-4" /> Add
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
 
