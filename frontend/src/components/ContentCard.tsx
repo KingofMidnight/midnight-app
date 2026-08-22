@@ -1,4 +1,4 @@
-﻿import { Link, useNavigate } from "react-router-dom";
+﻿import { Link } from "react-router-dom";
 import { BookOpen, Image, Tv, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -28,22 +28,20 @@ export interface StoryCardData {
 
 const ContentCard = ({ story }: { story: StoryCardData }) => {
   const Icon = typeIcons[story.type] || BookOpen;
-  const navigate = useNavigate();
-  // Rendered as a div (not <a>) because it can contain a nested author <Link>;
-  // nesting <a> inside <a> is invalid HTML and breaks click behavior in real browsers.
+  // The story link is a real, full-card <Link> stretched over the whole card
+  // (the "stretched link" pattern) so it keeps native anchor behavior: ctrl/cmd
+  // click and middle-click open in a new tab, and right-click gives "copy link" /
+  // "open in new tab". The author <Link> is a sibling layered on top with a
+  // higher z-index so it stays independently clickable/focusable, instead of
+  // being nested inside the story link (which is invalid HTML and breaks click
+  // behavior in real browsers).
   return (
-    <div
-      role="link"
-      tabIndex={0}
-      onClick={() => navigate(`/story/${story.id}`)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          navigate(`/story/${story.id}`);
-        }
-      }}
-      className="group block rounded-lg overflow-hidden bg-card border border-border transition-colors duration-200 hover:border-primary/40 cursor-pointer"
-    >
+    <div className="group relative rounded-lg overflow-hidden bg-card border border-border transition-colors duration-200 hover:border-primary/40">
+      <Link
+        to={`/story/${story.id}`}
+        aria-label={story.title}
+        className="absolute inset-0 z-0"
+      />
       <div className="aspect-[3/4] bg-secondary relative overflow-hidden">
         {story.cover_image_url ? (
           <img src={story.cover_image_url} alt={story.title} className="w-full h-full object-cover" />
@@ -75,8 +73,7 @@ const ContentCard = ({ story }: { story: StoryCardData }) => {
         {story.created_by ? (
           <Link
             to={`/profile/${story.created_by}`}
-            onClick={(e) => e.stopPropagation()}
-            className="text-xs text-muted-foreground truncate hover:text-primary transition-colors"
+            className="relative z-10 inline-block text-xs text-muted-foreground truncate hover:text-primary transition-colors"
           >
             {story.author_name || "Unknown author"}
           </Link>

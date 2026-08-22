@@ -34,14 +34,17 @@ router.post("/", requireAuth, async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const { data, error } = await supabaseAdmin.from("reviews").insert({
-      story_id: storyId,
-      user_id: req.user!.id,
-      title,
-      content,
-      rating,
-      is_approved: false,
-    });
+    const { data, error } = await supabaseAdmin
+      .from("reviews")
+      .insert({
+        story_id: storyId,
+        user_id: req.user!.id,
+        title,
+        content,
+        rating,
+        is_approved: false,
+      })
+      .select();
 
     if (error) throw error;
 

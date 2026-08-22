@@ -178,8 +178,10 @@ CREATE TABLE IF NOT EXISTS public.comments (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_comments_chapter_id ON public.comments(chapter_id);
-CREATE INDEX IF NOT EXISTS idx_comments_episode_id ON public.comments(episode_id);
+-- Indexes for chapter_id/episode_id are created later, after the ALTER TABLE
+-- upgrade block that adds these columns to pre-existing databases. Creating
+-- them here would fail on a database where public.comments already existed
+-- without these columns (CREATE TABLE IF NOT EXISTS is a no-op in that case).
 
 -- ── ratings ───────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.ratings (
