@@ -1032,3 +1032,11 @@ CREATE POLICY "chapter_choices_all_admin"
 --
 --   INSERT INTO public.user_roles (user_id, role)
 --   SELECT id, 'admin' FROM auth.users WHERE email = 'your@email.com';
+
+-- ── RPC function to safely increment helpful count ──────────────────────────
+CREATE OR REPLACE FUNCTION public.increment_helpful_count(review_id uuid)
+RETURNS void LANGUAGE sql SECURITY DEFINER AS $$
+  UPDATE public.reviews
+  SET helpful_count = helpful_count + 1
+  WHERE id = review_id;
+$$;
