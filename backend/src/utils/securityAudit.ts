@@ -1,4 +1,7 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "../config/supabase";
+
+const untypedAdmin = supabaseAdmin as unknown as SupabaseClient;
 
 interface RLSCheck {
   table: string;
@@ -31,7 +34,7 @@ export const checkSupabaseRLS = async (): Promise<{ safe: boolean; tables: RLSCh
 
   for (const table of tables) {
     try {
-      const { data: policies, error } = await supabaseAdmin
+      const { data: policies, error } = await untypedAdmin
         .from("information_schema.role_table_grants")
         .select("*")
         .eq("table_name", table)

@@ -19,8 +19,7 @@ export const useSessionSecurity = () => {
       if (result.success) {
         await supabase.auth.signOut();
         
-        toast.success({
-          title: "All Sessions Terminated",
+        toast.success("All Sessions Terminated", {
           description: "You have been logged out from all devices.",
         });
         
@@ -30,11 +29,7 @@ export const useSessionSecurity = () => {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error";
       setError(errorMessage);
-      toast.error({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
+      toast.error("Error", { description: errorMessage });
     } finally {
       setLoading(false);
     }

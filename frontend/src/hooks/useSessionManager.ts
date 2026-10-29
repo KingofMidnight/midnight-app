@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 
 export const useSessionManager = () => {
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -11,20 +12,10 @@ export const useSessionManager = () => {
       const { data } = await supabase.auth.getSession();
       if (!data.session) return;
 
-      const response = await fetch("/api/auth/session/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${data.session.access_token}`,
-        },
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        setSessionId(result.sessionId);
-        const newExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-        setExpiresAt(newExpiry);
-      }
+      const result = await api.sessions.create();
+      setSessionId(result.sessionId);
+      const newExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      setExpiresAt(newExpiry);
     } catch (error) {
       console.error("Session creation failed:", error);
     }
@@ -35,16 +26,7 @@ export const useSessionManager = () => {
       const { data } = await supabase.auth.getSession();
       if (!data.session) return;
 
-      const response = await fetch("/api/auth/session/validate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${data.session.access_token}`,
-        },
-        body: JSON.stringify({ sessionId: id }),
-      });
-
-      const result = await response.json();
+      const result = await api.sessions.validate(id);
       if (!result.valid) {
         setIsSessionValid(false);
         await supabase.auth.signOut();
@@ -59,14 +41,7 @@ export const useSessionManager = () => {
       const { data } = await supabase.auth.getSession();
       if (!data.session) return;
 
-      await fetch("/api/auth/session/terminate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${data.session.access_token}`,
-        },
-        body: JSON.stringify({ sessionId: id }),
-      });
+      await api.sessions.terminate(id);
     } catch (error) {
       console.error("Session termination failed:", error);
     }

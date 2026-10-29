@@ -1,4 +1,5 @@
 ﻿import { Router, Request, Response, NextFunction } from "express";
+import { z } from "zod";
 import { supabaseAdmin } from "../config/supabase";
 import { createError } from "../middleware/errorHandler";
 
@@ -23,19 +24,23 @@ router.post(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { storyId } = req.params;
+      if (!z.string().uuid().safeParse(storyId).success) throw createError("Invalid story id.", 400);
+
       const ip = getClientIp(req);
 
       const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-      const { data: existing } = await supabaseAdmin
+      const { data: existing, error: lookupErr } = await supabaseAdmin
         .from("story_views")
         .select("id")
         .eq("story_id", storyId)
         .eq("ip_address", ip)
         .gte("viewed_at", windowStart)
-        .maybeSingle();
+        .limit(1);
 
-      if (!existing) {
+      if (lookupErr) throw createError(lookupErr.message, 500);
+
+      if (!existing?.length) {
         await supabaseAdmin.from("story_views").insert({
           story_id: storyId,
           ip_address: ip,

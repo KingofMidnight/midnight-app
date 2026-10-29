@@ -47,7 +47,7 @@ export const WrittenReviews = ({
         title,
         content,
         rating,
-        is_approved: false,
+        is_approved: true,
       });
 
       if (error) throw error;

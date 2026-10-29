@@ -1,6 +1,8 @@
 ﻿import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,6 +20,7 @@ const AuthCreator = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { refreshUser } = useAuth();
   const t = siteContent.authCreator;
   const a = siteContent.auth;
 
@@ -40,27 +43,39 @@ const AuthCreator = () => {
         return;
       }
 
-      if (data.user) {
-        const { error: roleErr } = await supabase
-          .from("user_roles")
-          .insert({ user_id: data.user.id, role: "creator" as const });
-
-        if (roleErr && !roleErr.message.includes("duplicate")) {
-          console.error("Failed to assign creator role:", roleErr.message);
-        }
-
-        if (bio) {
-          await supabase.from("profiles").update({ bio }).eq("id", data.user.id);
-        }
-
-        navigate("/creator");
+      if (!data.session) {
+        toast({ title: a.checkEmail, description: `${a.checkEmailDesc} Then sign in here to activate your creator account.` });
+        setMode("signin");
+        setLoading(false);
+        return;
       }
+
+      try {
+        await api.creator.become();
+      } catch (err) {
+        toast({ title: "Could not activate creator account", description: (err as Error).message, variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+
+      if (bio && data.user) {
+        await supabase.from("profiles").update({ bio }).eq("id", data.user.id);
+      }
+
+      await refreshUser();
+      navigate("/creator");
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         toast({ title: "Sign in failed", description: error.message, variant: "destructive" });
       } else {
-        navigate("/creator");
+        try {
+          await api.creator.become();
+          await refreshUser();
+          navigate("/creator");
+        } catch (err) {
+          toast({ title: "Could not activate creator account", description: (err as Error).message, variant: "destructive" });
+        }
       }
     }
 

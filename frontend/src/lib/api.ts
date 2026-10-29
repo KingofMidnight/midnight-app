@@ -8,6 +8,14 @@ interface PendingResult {
   chapters: ChapterWithStory[];
 }
 
+type ApiResponse<T = unknown> = { success: boolean; data?: T; error?: string } & Record<string, unknown>;
+
+interface TwoFactorSetup {
+  secret: string;
+  manualEntryKey: string;
+  backupCodes: string[];
+}
+
 async function getJwt(): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error("Not authenticated.");
@@ -25,157 +33,147 @@ function downloadBlob(blob: Blob, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
-async function apiPatch<T = void>(path: string, body?: object): Promise<T> {
-  const jwt = await getJwt();
+async function request<R extends ApiResponse = ApiResponse>(
+  method: "GET" | "POST" | "PATCH" | "DELETE",
+  path: string,
+  { body, auth = true }: { body?: object; auth?: boolean } = {}
+): Promise<R> {
+  const headers: Record<string, string> = {};
+  if (auth) headers.Authorization = `Bearer ${await getJwt()}`;
+  if (body) headers["Content-Type"] = "application/json";
+
   const res = await fetch(`${BASE_URL}${path}`, {
-    method: "PATCH",
-    headers: { Authorization: `Bearer ${jwt}`, "Content-Type": "application/json" },
+    method,
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
-  const json = await res.json() as { success: boolean; data?: T; error?: string };
+
+  const json = (await res.json().catch(() => null)) as R | null;
+  if (!json) throw new Error(`Request failed (${res.status} ${res.statusText}).`);
   if (!json.success) throw new Error(json.error ?? "Request failed.");
-  return json.data as T;
+  return json;
 }
 
-async function apiPost<T = void>(path: string, body: string): Promise<T> {
-  const jwt = await getJwt();
+const apiGet = async <T>(path: string) => (await request<ApiResponse<T>>("GET", path)).data as T;
+const apiPost = async <T = void>(path: string, body?: object) =>
+  (await request<ApiResponse<T>>("POST", path, { body })).data as T;
+const apiPatch = async <T = void>(path: string, body?: object) =>
+  (await request<ApiResponse<T>>("PATCH", path, { body })).data as T;
+const apiDelete = async (path: string) => {
+  await request("DELETE", path);
+};
+
+async function downloadFile(path: string, filename: string, fallbackError: string): Promise<void> {
   const res = await fetch(`${BASE_URL}${path}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${jwt}`, "Content-Type": "application/json" },
-    body,
+    headers: { Authorization: `Bearer ${await getJwt()}` },
   });
-  const json = await res.json() as { success: boolean; data?: T; error?: string };
-  if (!json.success) throw new Error(json.error ?? "Request failed.");
-  return json.data as T;
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(json.error ?? fallbackError);
+  }
+  downloadBlob(await res.blob(), filename);
 }
 
-async function apiDelete(path: string): Promise<void> {
-  const jwt = await getJwt();
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${jwt}` },
-  });
-  const json = await res.json() as { success: boolean; error?: string };
-  if (!json.success) throw new Error(json.error ?? "Delete failed.");
-}
-
-async function apiGet<T>(path: string): Promise<T> {
-  const jwt = await getJwt();
-  const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { Authorization: `Bearer ${jwt}` },
-  });
-  const json = await res.json() as { success: boolean; data?: T; error?: string };
-  if (!json.success) throw new Error(json.error ?? "Request failed.");
-  return json.data as T;
-}
+const safeName = (s: string) => s.replace(/[^a-z0-9]/gi, "_").toLowerCase();
 
 export const api = {
   export: {
-    async epub(storyId: string, storyTitle: string): Promise<void> {
-      const jwt = await getJwt();
-      const res = await fetch(`${BASE_URL}/api/export/epub/${storyId}`, {
-        headers: { Authorization: `Bearer ${jwt}` },
-      });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(json.error ?? "EPUB generation failed.");
-      }
-      const blob = await res.blob();
-      downloadBlob(blob, `${storyTitle.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.epub`);
-    },
+    epub: (storyId: string, storyTitle: string) =>
+      downloadFile(`/api/export/epub/${storyId}`, `${safeName(storyTitle)}.epub`, "EPUB generation failed."),
 
-    async pdf(chapterId: string, chapterLabel: string): Promise<void> {
-      const jwt = await getJwt();
-      const res = await fetch(`${BASE_URL}/api/export/pdf/${chapterId}`, {
-        headers: { Authorization: `Bearer ${jwt}` },
-      });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(json.error ?? "PDF generation failed.");
-      }
-      const blob = await res.blob();
-      downloadBlob(blob, `${chapterLabel.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.pdf`);
-    },
+    pdf: (chapterId: string, chapterLabel: string) =>
+      downloadFile(`/api/export/pdf/${chapterId}`, `${safeName(chapterLabel)}.pdf`, "PDF generation failed."),
   },
 
   admin: {
-    async getPending(): Promise<PendingResult> {
-      return apiGet<PendingResult>("/api/admin/pending");
+    getPending: () => apiGet<PendingResult>("/api/admin/pending"),
+
+    reviewStory: async (storyId: string, status: "approved" | "rejected") => {
+      await apiPatch(`/api/admin/stories/${storyId}/review`, { status });
     },
 
-    async reviewStory(storyId: string, status: "approved" | "rejected"): Promise<void> {
-      await apiPatch("/api/admin/stories/" + storyId + "/review", { status });
+    reviewChapter: async (chapterId: string, status: "approved" | "rejected") => {
+      await apiPatch(`/api/admin/chapters/${chapterId}/review`, { status });
     },
 
-    async reviewChapter(chapterId: string, status: "approved" | "rejected"): Promise<void> {
-      await apiPatch("/api/admin/chapters/" + chapterId + "/review", { status });
+    reviewEpisode: async (episodeId: string, status: "approved" | "rejected") => {
+      await apiPatch(`/api/admin/episodes/${episodeId}/review`, { status });
     },
 
-    async reviewEpisode(episodeId: string, status: "approved" | "rejected"): Promise<void> {
-      await apiPatch("/api/admin/episodes/" + episodeId + "/review", { status });
-    },
+    deleteComment: (commentId: string) => apiDelete(`/api/admin/comments/${commentId}`),
 
-    async deleteComment(commentId: string): Promise<void> {
-      await apiDelete("/api/admin/comments/" + commentId);
-    },
-
-    async resolveReport(
+    resolveReport: async (
       reportId: string,
       status: "resolved" | "dismissed" | "reviewing",
       admin_notes?: string
-    ): Promise<void> {
-      await apiPatch("/api/admin/reports/" + reportId + "/resolve", { status, admin_notes });
+    ) => {
+      await apiPatch(`/api/admin/reports/${reportId}/resolve`, { status, admin_notes });
     },
 
-    async banUser(userId: string, reason: string, notes?: string, expires_at?: string): Promise<void> {
-      await apiPost<void>("/api/admin/users/" + userId + "/ban", JSON.stringify({ reason, notes, expires_at }));
+    banUser: async (userId: string, reason: string, notes?: string, expires_at?: string) => {
+      await apiPost(`/api/admin/users/${userId}/ban`, { reason, notes, expires_at });
     },
 
-    async unbanUser(userId: string): Promise<void> {
-      await apiPatch("/api/admin/users/" + userId + "/unban");
+    unbanUser: async (userId: string) => {
+      await apiPatch(`/api/admin/users/${userId}/unban`);
     },
+
+    deleteUser: (userId: string) => apiDelete(`/api/admin/users/${userId}`),
+  },
+
+  creator: {
+    become: () => apiPost("/api/auth/creator", {}),
+    leave: () => apiDelete("/api/auth/creator"),
+  },
+
+  twoFactor: {
+    setup: (email: string) =>
+      request<ApiResponse & TwoFactorSetup>("POST", "/api/auth/2fa/setup", { body: { email } }),
+
+    verifySetup: (token: string, secret: string) =>
+      request("POST", "/api/auth/2fa/verify-setup", { body: { token, secret } }),
+
+    enable: (token: string, backupCodes: string[]) =>
+      request("POST", "/api/auth/2fa/enable", { body: { token, backupCodes } }),
+
+    verify: (token: string) => request("POST", "/api/auth/2fa/verify", { body: { token } }),
+
+    useBackupCode: (code: string) =>
+      request<ApiResponse & { remainingCodes: number }>("POST", "/api/auth/2fa/backup-code", { body: { code } }),
+
+    disable: () => request("POST", "/api/auth/2fa/disable"),
+  },
+
+  sessions: {
+    create: () => request<ApiResponse & { sessionId: string }>("POST", "/api/auth/session/create"),
+
+    validate: (sessionId: string) =>
+      request<ApiResponse & { valid: boolean }>("POST", "/api/auth/session/validate", { body: { sessionId } }),
+
+    terminate: (sessionId: string) =>
+      request("POST", "/api/auth/session/terminate", { body: { sessionId } }),
   },
 
   async health(): Promise<boolean> {
     try {
-      const res = await fetch(`${BASE_URL}/api/health`);
-      const json = await res.json() as { success: boolean };
-      return json.success === true;
+      await request("GET", "/api/health", { auth: false });
+      return true;
     } catch {
       return false;
     }
   },
 
   sessionSecurity: {
-    async terminateAllSessions(): Promise<{ success: boolean; message: string }> {
-      const jwt = await getJwt();
-      const res = await fetch(`${BASE_URL}/api/session-security/terminate-all`, {
-        method: "POST",
-        headers: { 
-          Authorization: `Bearer ${jwt}`,
-          "Content-Type": "application/json"
-        },
-      });
-      
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to terminate sessions");
-      }
-      
-      return await res.json();
-    },
+    terminateAllSessions: () =>
+      request<ApiResponse & { message: string }>("POST", "/api/session-security/session/terminate-all"),
   },
 
   views: {
     async record(storyId: string): Promise<number> {
-      const res = await fetch(`${BASE_URL}/api/views/record`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ story_id: storyId }),
+      const json = await request<ApiResponse<{ view_count: number }>>("POST", `/api/views/stories/${storyId}`, {
+        auth: false,
       });
-      const json = await res.json() as { success: boolean; data?: { count: number }; error?: string };
-      if (!json.success) throw new Error(json.error ?? "Failed to record view.");
-      return json.data?.count ?? 0;
+      return json.data?.view_count ?? 0;
     },
   },
 };

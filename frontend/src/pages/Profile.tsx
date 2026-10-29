@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { Link, Navigate } from "react-router-dom";
 import { User, BookOpen, Star, CheckCircle, Bookmark, Settings, Eye, EyeOff, Camera, Shield, Archive, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -135,30 +136,14 @@ const Profile = () => {
 
     try {
       if (isCreator) {
-        await supabase.from("user_roles").delete().eq("user_id", user.id).eq("role", "creator");
-
-        const { data: stories } = await supabase
-          .from("stories")
-          .select("id")
-          .eq("created_by", user.id)
-          .eq("review_status", "approved");
-
-        if (stories && stories.length > 0) {
-          await supabase
-            .from("stories")
-            .update({ review_status: "archived" })
-            .in("id", stories.map(s => s.id));
-        }
+        await api.creator.leave();
 
         toast({
           title: "Account changed",
           description: "You are no longer a creator. All your works have been archived.",
         });
       } else {
-        await supabase.from("user_roles").insert({
-          user_id: user.id,
-          role: "creator"
-        });
+        await api.creator.become();
 
         toast({
           title: "Account changed",

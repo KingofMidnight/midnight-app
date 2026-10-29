@@ -54,7 +54,7 @@ export const validateSession = async (sessionId: string): Promise<boolean> => {
     return false;
   }
 
-  return data.is_active;
+  return data.is_active === true;
 };
 
 export const terminateSession = async (sessionId: string): Promise<boolean> => {

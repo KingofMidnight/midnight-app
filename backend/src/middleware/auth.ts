@@ -1,18 +1,38 @@
 ﻿import { Request, Response, NextFunction } from "express";
 import { supabaseAdmin } from "../config/supabase";
-import type { AuthUser } from "../types/index";
+import type { AppRole, AuthUser } from "../types/index";
 import "../types/express";
 
-async function getUserRole(userId: string): Promise<string | null> {
+const ROLE_PRIORITY: AppRole[] = ["admin", "moderator", "creator", "user"];
+
+export async function getUserRoles(userId: string): Promise<AppRole[]> {
   const { data, error } = await supabaseAdmin
     .from("user_roles")
     .select("role")
-    .eq("user_id", userId)
-    .maybeSingle();
+    .eq("user_id", userId);
 
-  if (error || !data) return null;
-  return data.role;
+  if (error || !data) return [];
+  return data.map((r) => r.role);
 }
+
+const requireAnyRole = (allowed: AppRole[], message: string) =>
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (!req.user) {
+      res.status(401).json({ success: false, error: "Not authenticated." });
+      return;
+    }
+
+    const roles = await getUserRoles(req.user.id);
+    const match = ROLE_PRIORITY.find((r) => allowed.includes(r) && roles.includes(r));
+
+    if (!match) {
+      res.status(403).json({ success: false, error: message });
+      return;
+    }
+
+    req.user.role = match;
+    next();
+  };
 
 export const requireAuth = async (
   req: Request,
@@ -43,66 +63,25 @@ export const requireAuth = async (
   next();
 };
 
-export const requireCreator = async (
+export const optionalAuth = async (
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ): Promise<void> => {
-  if (!req.user) {
-    res.status(401).json({ success: false, error: "Not authenticated." });
-    return;
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith("Bearer ")) {
+    const jwt = authHeader.slice(7);
+    const { data: { user } } = await supabaseAdmin.auth.getUser(jwt);
+    if (user) {
+      req.user = { id: user.id, email: user.email ?? undefined } satisfies AuthUser;
+      req.jwt = jwt;
+    }
   }
-
-  const role = await getUserRole(req.user.id);
-
-  if (!role || !["creator", "admin", "moderator"].includes(role)) {
-    res.status(403).json({ success: false, error: "Creator account required." });
-    return;
-  }
-
-  req.user.role = role;
   next();
 };
 
-export const requireAdmin = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  if (!req.user) {
-    res.status(401).json({ success: false, error: "Not authenticated." });
-    return;
-  }
+export const requireCreator = requireAnyRole(["creator", "admin", "moderator"], "Creator account required.");
 
-  const role = await getUserRole(req.user.id);
+export const requireAdmin = requireAnyRole(["admin"], "Admin access required.");
 
-  if (role !== "admin") {
-    res.status(403).json({ success: false, error: "Admin access required." });
-    return;
-  }
-
-  req.user.role = "admin";
-  next();
-};
-
-export const requireModerator = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  if (!req.user) {
-    res.status(401).json({ success: false, error: "Not authenticated." });
-    return;
-  }
-
-  const role = await getUserRole(req.user.id);
-
-  if (!role || !["admin", "moderator"].includes(role)) {
-    res.status(403).json({ success: false, error: "Moderator access required." });
-    return;
-  }
-
-  req.user.role = role;
-  next();
-};
-
+export const requireModerator = requireAnyRole(["admin", "moderator"], "Moderator access required.");

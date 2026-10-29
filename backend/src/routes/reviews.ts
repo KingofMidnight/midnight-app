@@ -34,18 +34,22 @@ router.post("/", requireAuth, async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const { data, error } = await supabaseAdmin.from("reviews").insert({
-      story_id: storyId,
-      user_id: req.user!.id,
-      title,
-      content,
-      rating,
-      is_approved: false,
-    });
+    const { data, error } = await supabaseAdmin
+      .from("reviews")
+      .insert({
+        story_id: storyId,
+        user_id: req.user!.id,
+        title,
+        content,
+        rating,
+        is_approved: true,
+      })
+      .select()
+      .single();
 
     if (error) throw error;
 
-    res.status(201).json({ success: true, review: data?.[0] ?? null });
+    res.status(201).json({ success: true, review: data });
   } catch (error) {
     res.status(400).json({ success: false, error: "Invalid request." });
   }

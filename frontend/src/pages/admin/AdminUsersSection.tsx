@@ -47,7 +47,7 @@ const AdminUsersSection = () => {
   const load = useCallback(async () => {
     const { data: profiles } = await supabase
       .from("profiles")
-      .select("id, username, display_name, avatar_url, created_at, bio, show_lists, show_created_content, updated_at")
+      .select("id, username, display_name, avatar_url, created_at, bio, show_lists, show_created_content, show_favorites, updated_at")
       .order("created_at", { ascending: false });
 
     if (!profiles) { setLoading(false); return; }
@@ -81,18 +81,13 @@ const AdminUsersSection = () => {
 
   const deleteUser = async (userId: string, username: string | null) => {
     if (!confirm(`Are you sure you want to delete "${username ?? userId}"? This action cannot be undone.`)) return;
-    await Promise.all([
-      supabase.from("user_roles").delete().eq("user_id", userId),
-      supabase.from("comments").delete().eq("user_id", userId),
-      supabase.from("ratings").delete().eq("user_id", userId),
-      supabase.from("user_lists").delete().eq("user_id", userId),
-      supabase.from("user_progress").delete().eq("user_id", userId),
-      supabase.from("notifications").delete().eq("user_id", userId),
-    ]);
-    const { error } = await supabase.from("profiles").delete().eq("id", userId);
-    if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
-    toast({ title: "User data removed" });
-    load();
+    try {
+      await backendApi.admin.deleteUser(userId);
+      toast({ title: "User deleted" });
+      load();
+    } catch (err) {
+      toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
+    }
   };
 
   const resetProfile = async (userId: string) => {
@@ -124,8 +119,6 @@ const AdminUsersSection = () => {
     setBanning(true);
     try {
       await backendApi.admin.banUser(banTarget.id, banReason.trim());
-
-      await supabase.auth.admin.signOut(banTarget.id);
 
       toast({ title: `${banTarget.display_name ?? banTarget.username ?? "User"} has been banned` });
       setBanModalOpen(false);

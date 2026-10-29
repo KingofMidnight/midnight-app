@@ -5,8 +5,10 @@ import { supabaseAdmin } from "../config/supabase.js";
 
 const router = Router();
 
+const ContentRatingSchema = z.enum(["safe", "suggestive", "mature", "explicit"]);
+
 const UpdateStoryRatingSchema = z.object({
-  contentRating: z.enum(["safe", "suggestive", "mature", "explicit"]),
+  contentRating: ContentRatingSchema,
 });
 
 router.get("/trending", async (req: Request, res: Response): Promise<void> => {
@@ -19,7 +21,12 @@ router.get("/trending", async (req: Request, res: Response): Promise<void> => {
       .eq("review_status", "approved");
 
     if (rating) {
-      query = query.eq("content_rating", rating as string);
+      const parsed = ContentRatingSchema.safeParse(rating);
+      if (!parsed.success) {
+        res.status(400).json({ success: false, error: "Invalid rating." });
+        return;
+      }
+      query = query.eq("content_rating", parsed.data);
     }
 
     const { data, error } = await query
@@ -47,7 +54,7 @@ router.get("/highest-rated", async (req: Request, res: Response): Promise<void> 
 
     if (error) throw error;
 
-    const storyIds = data?.map((r) => r.story_id) || [];
+    const storyIds = (data ?? []).map((r) => r.story_id).filter((id): id is string => id !== null);
     if (storyIds.length === 0) {
       res.json({ success: true, stories: [] });
       return;
@@ -73,11 +80,10 @@ router.get("/highest-rated", async (req: Request, res: Response): Promise<void> 
 
 router.get("/by-rating/:rating", async (req: Request, res: Response): Promise<void> => {
   try {
-    const { rating } = req.params;
     const { limit = 20, offset = 0 } = req.query;
 
-    const validRatings = ["safe", "suggestive", "mature", "explicit"];
-    if (!validRatings.includes(rating)) {
+    const parsed = ContentRatingSchema.safeParse(req.params.rating);
+    if (!parsed.success) {
       res.status(400).json({ success: false, error: "Invalid rating." });
       return;
     }
@@ -85,7 +91,7 @@ router.get("/by-rating/:rating", async (req: Request, res: Response): Promise<vo
     const { data, error } = await supabaseAdmin
       .from("stories")
       .select("*")
-      .eq("content_rating", rating)
+      .eq("content_rating", parsed.data)
       .eq("review_status", "approved")
       .range(Number(offset), Number(offset) + Number(limit) - 1);
 

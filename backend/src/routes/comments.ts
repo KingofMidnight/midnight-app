@@ -1,9 +1,9 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, optionalAuth } from "../middleware/auth.js";
 import { commentLimiter } from "../middleware/rateLimiter.js";
 import { supabaseAdmin } from "../config/supabase.js";
-import { getBlockedUsers } from "../utils/userBlocks.js";
+import { getBlockRelatedUsers } from "../utils/userBlocks.js";
 import { sanitizeCommentHtml, validateTextContent } from "../utils/validation.js";
 
 const router = Router();
@@ -13,6 +13,10 @@ const CreateCommentSchema = z.object({
   content: z.string().min(1).max(5000),
   parentCommentId: z.string().uuid().optional(),
 });
+
+const UpdateCommentSchema = z.object({ content: z.string().min(1).max(5000) });
+
+const UuidSchema = z.string().uuid();
 
 interface CommentNode {
   id: string;
@@ -58,39 +62,88 @@ const buildCommentTree = (comments: any[]): CommentNode[] => {
   return roots;
 };
 
+const sendError = (res: Response, error: unknown): void => {
+  if (error instanceof z.ZodError) {
+    res.status(400).json({ success: false, error: error.issues[0]?.message ?? "Invalid request." });
+    return;
+  }
+  res.status(500).json({ success: false, error: "Internal server error." });
+};
+
+const prepareContent = (content: string): { ok: true; html: string } | { ok: false; error: string } => {
+  const check = validateTextContent(content, 1, 5000);
+  if (!check.valid) return { ok: false, error: check.error ?? "Invalid content." };
+  const html = sanitizeCommentHtml(content);
+  if (!html.trim()) return { ok: false, error: "Comment is empty after sanitization." };
+  return { ok: true, html };
+};
+
+async function ensureOwner(commentId: string, userId: string, res: Response): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from("comments")
+    .select("user_id")
+    .eq("id", commentId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) {
+    res.status(404).json({ success: false, error: "Comment not found." });
+    return false;
+  }
+  if (data.user_id !== userId) {
+    res.status(403).json({ success: false, error: "Not authorized." });
+    return false;
+  }
+  return true;
+}
+
 router.post("/", requireAuth, commentLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const { storyId, content, parentCommentId } = CreateCommentSchema.parse(req.body);
 
-    const contentValidation = validateTextContent(content, 1, 5000);
-    if (!contentValidation.valid) {
-      res.status(400).json({ success: false, error: contentValidation.error });
+    const prepared = prepareContent(content);
+    if (!prepared.ok) {
+      res.status(400).json({ success: false, error: prepared.error });
       return;
     }
 
-    const sanitizedContent = sanitizeCommentHtml(content);
-    const { data, error } = await supabaseAdmin.from("comments").insert({
-      story_id: storyId,
-      user_id: req.user!.id,
-      content: sanitizedContent,
-      parent_comment_id: parentCommentId,
-      is_approved: false,
-    });
+    if (parentCommentId) {
+      const { data: parent, error: parentErr } = await supabaseAdmin
+        .from("comments")
+        .select("story_id")
+        .eq("id", parentCommentId)
+        .maybeSingle();
+      if (parentErr) throw parentErr;
+      if (!parent || parent.story_id !== storyId) {
+        res.status(400).json({ success: false, error: "Parent comment not found on this story." });
+        return;
+      }
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("comments")
+      .insert({
+        story_id: storyId,
+        user_id: req.user!.id,
+        content: prepared.html,
+        parent_comment_id: parentCommentId,
+        is_approved: true,
+      })
+      .select()
+      .single();
 
     if (error) throw error;
 
-    res.status(201).json({ success: true, comment: data?.[0] });
+    res.status(201).json({ success: true, comment: data });
   } catch (error) {
-    res.status(400).json({ success: false, error: "Invalid request." });
+    sendError(res, error);
   }
 });
 
-router.get("/story/:storyId", async (req: Request, res: Response): Promise<void> => {
+router.get("/story/:storyId", optionalAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const { storyId } = req.params;
-    const userId = req.user?.id;
-
-    const blockedUsers = userId ? await getBlockedUsers(userId) : [];
+    const storyId = UuidSchema.parse(req.params.storyId);
+    const hiddenUsers = req.user ? await getBlockRelatedUsers(req.user.id) : [];
 
     const { data, error } = await supabaseAdmin
       .from("comments")
@@ -101,60 +154,47 @@ router.get("/story/:storyId", async (req: Request, res: Response): Promise<void>
 
     if (error) throw error;
 
-    const filtered = (data || []).filter((comment) => !blockedUsers.includes(comment.user_id));
+    const filtered = (data || []).filter((comment) => !hiddenUsers.includes(comment.user_id));
 
-    const tree = buildCommentTree(filtered);
-
-    res.json({ success: true, comments: tree });
+    res.json({ success: true, comments: buildCommentTree(filtered) });
   } catch (error) {
-    res.status(500).json({ success: false, error: "Internal server error." });
+    sendError(res, error);
   }
 });
 
 router.patch("/:commentId", requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const { commentId } = req.params;
-    const { content } = z.object({ content: z.string().min(1).max(5000) }).parse(req.body);
+    const commentId = UuidSchema.parse(req.params.commentId);
+    const { content } = UpdateCommentSchema.parse(req.body);
 
-    const existing = await supabaseAdmin
-      .from("comments")
-      .select("user_id")
-      .eq("id", commentId)
-      .maybeSingle();
-
-    if (!existing.data || existing.data.user_id !== req.user!.id) {
-      res.status(403).json({ success: false, error: "Not authorized." });
+    const prepared = prepareContent(content);
+    if (!prepared.ok) {
+      res.status(400).json({ success: false, error: prepared.error });
       return;
     }
 
+    if (!(await ensureOwner(commentId, req.user!.id, res))) return;
+
     const { data, error } = await supabaseAdmin
       .from("comments")
-      .update({ content })
+      .update({ content: prepared.html })
       .eq("id", commentId)
-      .select();
+      .select()
+      .single();
 
     if (error) throw error;
 
-    res.json({ success: true, comment: data[0] });
+    res.json({ success: true, comment: data });
   } catch (error) {
-    res.status(400).json({ success: false, error: "Invalid request." });
+    sendError(res, error);
   }
 });
 
 router.delete("/:commentId", requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const { commentId } = req.params;
+    const commentId = UuidSchema.parse(req.params.commentId);
 
-    const existing = await supabaseAdmin
-      .from("comments")
-      .select("user_id")
-      .eq("id", commentId)
-      .maybeSingle();
-
-    if (!existing.data || existing.data.user_id !== req.user!.id) {
-      res.status(403).json({ success: false, error: "Not authorized." });
-      return;
-    }
+    if (!(await ensureOwner(commentId, req.user!.id, res))) return;
 
     const { error } = await supabaseAdmin.from("comments").delete().eq("id", commentId);
 
@@ -162,7 +202,7 @@ router.delete("/:commentId", requireAuth, async (req: Request, res: Response): P
 
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ success: false, error: "Internal server error." });
+    sendError(res, error);
   }
 });
 

@@ -424,10 +424,59 @@ export type Database = {
           },
         ]
       }
+      reviews: {
+        Row: {
+          content: string
+          created_at: string
+          helpful_count: number | null
+          id: string
+          is_approved: boolean | null
+          rating: number | null
+          story_id: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          helpful_count?: number | null
+          id?: string
+          is_approved?: boolean | null
+          rating?: number | null
+          story_id: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          helpful_count?: number | null
+          id?: string
+          is_approved?: boolean | null
+          rating?: number | null
+          story_id?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviews_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stories: {
         Row: {
           author_name: string | null
+          average_rating: number | null
           content_origin: Database["public"]["Enums"]["content_origin"]
+          content_rating: Database["public"]["Enums"]["content_rating"]
           cover_image_url: string | null
           created_at: string
           created_by: string | null
@@ -444,7 +493,9 @@ export type Database = {
         }
         Insert: {
           author_name?: string | null
+          average_rating?: number | null
           content_origin?: Database["public"]["Enums"]["content_origin"]
+          content_rating?: Database["public"]["Enums"]["content_rating"]
           cover_image_url?: string | null
           created_at?: string
           created_by?: string | null
@@ -461,7 +512,9 @@ export type Database = {
         }
         Update: {
           author_name?: string | null
+          average_rating?: number | null
           content_origin?: Database["public"]["Enums"]["content_origin"]
+          content_rating?: Database["public"]["Enums"]["content_rating"]
           cover_image_url?: string | null
           created_at?: string
           created_by?: string | null
@@ -517,6 +570,65 @@ export type Database = {
           },
         ]
       }
+      story_views: {
+        Row: {
+          id: string
+          ip_address: string
+          story_id: string
+          viewed_at: string
+        }
+        Insert: {
+          id?: string
+          ip_address: string
+          story_id: string
+          viewed_at?: string
+        }
+        Update: {
+          id?: string
+          ip_address?: string
+          story_id?: string
+          viewed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_views_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_2fa_secrets: {
+        Row: {
+          backup_codes: string[]
+          created_at: string
+          id: string
+          is_enabled: boolean | null
+          secret: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          backup_codes?: string[]
+          created_at?: string
+          id?: string
+          is_enabled?: boolean | null
+          secret: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          backup_codes?: string[]
+          created_at?: string
+          id?: string
+          is_enabled?: boolean | null
+          secret?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_bans: {
         Row: {
           banned_at: string
@@ -547,6 +659,30 @@ export type Database = {
           notes?: string | null
           reason?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      user_blocks: {
+        Row: {
+          blocked_id: string
+          blocker_id: string
+          created_at: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          blocked_id: string
+          blocker_id: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          blocked_id?: string
+          blocker_id?: string
+          created_at?: string
+          id?: string
+          reason?: string | null
         }
         Relationships: []
       }
@@ -681,9 +817,59 @@ export type Database = {
         }
         Relationships: []
       }
+      user_sessions: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          ip_address: string | null
+          is_active: boolean | null
+          last_activity: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          ip_address?: string | null
+          is_active?: boolean | null
+          last_activity?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          ip_address?: string | null
+          is_active?: boolean | null
+          last_activity?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
-      [_ in never]: never
+      story_ratings_summary: {
+        Row: {
+          average_rating: number | null
+          max_rating: number | null
+          min_rating: number | null
+          rating_count: number | null
+          story_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ratings_story_id_fkey"
+            columns: ["story_id"]
+            isOneToOne: false
+            referencedRelation: "stories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       has_role: {
@@ -693,6 +879,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_helpful_count: {
+        Args: { review_id: string }
+        Returns: undefined
+      }
+      increment_story_view_count: {
+        Args: { story_id_input: string }
+        Returns: undefined
+      }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_creator: { Args: { _user_id: string }; Returns: boolean }
       is_moderator: { Args: { _user_id: string }; Returns: boolean }
@@ -700,6 +894,7 @@ export type Database = {
     Enums: {
       app_role: "admin" | "moderator" | "user" | "creator"
       content_origin: "original" | "fanfiction"
+      content_rating: "safe" | "suggestive" | "mature" | "explicit"
       list_type: "reading" | "completed" | "plan_to_read"
       relationship_type:
         | "adapts"
@@ -713,7 +908,10 @@ export type Database = {
       story_type:
         | "novel"
         | "manga"
+        | "comic"
         | "anime"
+        | "cartoon"
+        | "audiobook"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -843,6 +1041,7 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "moderator", "user", "creator"],
       content_origin: ["original", "fanfiction"],
+      content_rating: ["safe", "suggestive", "mature", "explicit"],
       list_type: ["reading", "completed", "plan_to_read"],
       relationship_type: [
         "adapts",
@@ -854,7 +1053,7 @@ export const Constants = {
       report_status: ["pending", "reviewing", "resolved", "dismissed"],
       report_type: ["content", "user", "dmca"],
       story_status: ["ongoing", "completed", "hiatus"],
-      story_type: ["novel", "manga", "anime"],
+      story_type: ["novel", "manga", "comic", "anime", "cartoon", "audiobook"],
     },
   },
 } as const

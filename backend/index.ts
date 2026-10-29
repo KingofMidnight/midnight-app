@@ -53,6 +53,10 @@ const globalLimiter = rateLimit({
 
 app.use(globalLimiter);
 
+app.get("/api/health", (_req, res) => {
+  res.json({ success: true, data: { status: "ok", uptime: process.uptime() } });
+});
+
 app.use("/api/auth", authRouter);
 app.use("/api/session-security", sessionSecurityRouter);
 app.use("/api/blocks", blocksRouter);

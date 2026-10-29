@@ -33,6 +33,16 @@ export const isUserBlocked = async (blockerId: string, blockedId: string): Promi
   return !error && !!data;
 };
 
+export const getBlockRelatedUsers = async (userId: string): Promise<string[]> => {
+  const { data, error } = await supabaseAdmin
+    .from("user_blocks")
+    .select("blocker_id, blocked_id")
+    .or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`);
+
+  if (error) throw error;
+  return (data ?? []).map((b) => (b.blocker_id === userId ? b.blocked_id : b.blocker_id));
+};
+
 export const getBlockedUsers = async (userId: string): Promise<string[]> => {
   const { data, error } = await supabaseAdmin
     .from("user_blocks")

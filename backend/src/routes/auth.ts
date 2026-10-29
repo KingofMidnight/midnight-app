@@ -227,6 +227,74 @@ router.post(
   }
 );
 
+async function hasActiveBan(userId: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from("user_bans")
+    .select("expires_at")
+    .eq("user_id", userId)
+    .eq("is_active", true);
+
+  if (error) throw error;
+  const now = Date.now();
+  return (data ?? []).some((b) => !b.expires_at || new Date(b.expires_at).getTime() > now);
+}
+
+router.post(
+  "/creator",
+  authLimiter,
+  requireAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      if (await hasActiveBan(req.user!.id)) {
+        res.status(403).json({ success: false, error: "Banned accounts cannot become creators." });
+        return;
+      }
+
+      const { error } = await supabaseAdmin
+        .from("user_roles")
+        .upsert(
+          { user_id: req.user!.id, role: "creator" },
+          { onConflict: "user_id,role", ignoreDuplicates: true }
+        );
+
+      if (error) throw error;
+
+      res.json({ success: true, data: { role: "creator" } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to grant creator role." });
+    }
+  }
+);
+
+router.delete(
+  "/creator",
+  authLimiter,
+  requireAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { error: roleErr } = await supabaseAdmin
+        .from("user_roles")
+        .delete()
+        .eq("user_id", req.user!.id)
+        .eq("role", "creator");
+
+      if (roleErr) throw roleErr;
+
+      const { error: archiveErr } = await supabaseAdmin
+        .from("stories")
+        .update({ review_status: "archived" })
+        .eq("created_by", req.user!.id)
+        .eq("review_status", "approved");
+
+      if (archiveErr) throw archiveErr;
+
+      res.json({ success: true, data: { role: null } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: "Failed to remove creator role." });
+    }
+  }
+);
+
 router.post(
   "/session/create",
   authLimiter,

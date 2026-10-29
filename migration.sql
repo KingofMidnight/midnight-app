@@ -603,7 +603,6 @@ WHERE id NOT IN (SELECT id FROM public.profiles)
 ON CONFLICT (id) DO NOTHING;
 
 -- Migration: add comment_id to reports table
-──────────────────────────────────
 
 ALTER TABLE public.reports
   ADD COLUMN IF NOT EXISTS comment_id uuid REFERENCES public.comments(id) ON DELETE SET NULL;
@@ -612,7 +611,6 @@ ALTER TABLE public.reports
 CREATE INDEX IF NOT EXISTS reports_comment_id_idx ON public.reports(comment_id);
 
 -- Favorites
-──────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS user_favorites (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -715,11 +713,11 @@ $$;
 -- (run periodically via pg_cron or Supabase scheduled functions)
 -- DELETE FROM public.story_views WHERE viewed_at < now() - interval '30 days';
 
--- Adicionar coluna show_favorites à tabela profiles
+-- Add show_favorites column to the profiles table
 ALTER TABLE profiles 
 ADD COLUMN show_favorites BOOLEAN DEFAULT true;
 
--- Criar índice para melhor performance
+-- Create an index for better performance
 CREATE INDEX IF NOT EXISTS idx_profiles_show_favorites ON profiles(show_favorites);
 
 -- ── Content Rating Enum ───────────────────────────────────────

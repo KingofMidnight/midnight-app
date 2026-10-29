@@ -1,5 +1,6 @@
 ﻿import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
+import type { Database } from "../types/database";
 
 dotenv.config();
 
@@ -13,12 +14,12 @@ if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
   );
 }
 
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+export const supabaseAdmin = createClient<Database>(supabaseUrl, supabaseServiceKey, {
   auth: { persistSession: false },
 });
 
 export const supabaseForUser = (jwt: string) =>
-  createClient(supabaseUrl!, supabaseAnonKey!, {
+  createClient<Database>(supabaseUrl!, supabaseAnonKey!, {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
     auth: { persistSession: false },
   });
