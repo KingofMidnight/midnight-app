@@ -3,18 +3,27 @@ import { Request } from "express";
 
 const authAttempts = new Map<string, { count: number; resetTime: number }>();
 
+// General limiter for authenticated account actions (sessions, creator role).
+// Keyed on IP only: a client-supplied value in the key would let callers bypass it.
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: "Too many authentication attempts, try again later." },
   skip: (req) => req.method !== "POST",
-  keyGenerator: (req: Request) => {
-    const ip = req.ip || req.connection.remoteAddress || "unknown";
-    const email = req.body?.email || "no-email";
-    return `auth:${ip}:${email}`;
-  },
+  keyGenerator: (req: Request) => `auth:${req.ip || req.socket.remoteAddress || "unknown"}`,
+});
+
+// Brute-force guard for TOTP / backup-code checks. Must run AFTER requireAuth so
+// the limit follows the account, not the IP (TOTP codes are only 6 digits).
+export const twoFactorLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: "Too many 2FA attempts, try again later." },
+  keyGenerator: (req: Request) => `2fa:${req.user?.id ?? req.ip ?? "unknown"}`,
 });
 
 export const passwordResetLimiter = rateLimit({

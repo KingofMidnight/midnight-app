@@ -2,8 +2,8 @@ import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Rating } from "@/components/ui/rating";
 import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 
 interface Review {
   id: string;
@@ -41,19 +41,23 @@ export const WrittenReviews = ({
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.from("reviews").insert({
-        story_id: storyId,
-        user_id: currentUserId,
-        title,
-        content,
-        rating,
-        is_approved: true,
-      });
+      const { data, error } = await supabase
+        .from("reviews")
+        .insert({
+          story_id: storyId,
+          user_id: currentUserId,
+          title,
+          content,
+          rating,
+          is_approved: true,
+        })
+        .select("id")
+        .single();
 
       if (error) throw error;
 
       const newReview: Review = {
-        id: data[0]?.id || "",
+        id: data.id,
         title,
         content,
         rating,
@@ -77,10 +81,7 @@ export const WrittenReviews = ({
 
   const handleHelpful = async (reviewId: string) => {
     try {
-      await supabase
-        .from("reviews")
-        .update({ helpful_count: supabase.rpc("increment", { x: 1 }) })
-        .eq("id", reviewId);
+      await api.reviews.markHelpful(reviewId);
     } catch (error) {
       console.error("Failed to mark as helpful:", error);
     }

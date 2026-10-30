@@ -52,10 +52,10 @@ const base32Decode = (input: string): Buffer => {
   return Buffer.from(output);
 };
 
-const generateTOTPToken = (secret: string): string => {
+const generateTOTPToken = (secret: string, stepOffset = 0): string => {
   const decodedSecret = base32Decode(secret);
   const now = Math.floor(Date.now() / 1000);
-  let timeCounter = Math.floor(now / 30);
+  let timeCounter = Math.floor(now / 30) + stepOffset;
   const buffer = Buffer.alloc(8);
 
   for (let i = 7; i >= 0; i--) {
@@ -77,36 +77,43 @@ const generateTOTPToken = (secret: string): string => {
   return String(code).padStart(6, "0");
 };
 
-export const generate2FASecret = async (email: string): Promise<TwoFactorSetup> => {
+const ISSUER = process.env.SITE_NAME ?? "Midnight";
+
+export const generate2FASecret = async (email: string): Promise<TwoFactorSetup & { otpauthUrl: string }> => {
   const secret = base32Encode(crypto.randomBytes(20));
-  const encodedEmail = encodeURIComponent(email);
-  const manualEntryKey = secret;
+  const label = encodeURIComponent(`${ISSUER}:${email}`);
+  const otpauthUrl = `otpauth://totp/${label}?secret=${secret}&issuer=${encodeURIComponent(ISSUER)}&algorithm=SHA1&digits=6&period=30`;
 
-  const backupCodes = Array.from({ length: 10 }, () =>
-    crypto.randomBytes(4).toString("hex").toUpperCase()
-  );
-
-  return { secret, manualEntryKey, backupCodes };
+  return { secret, manualEntryKey: secret, backupCodes: generateBackupCodes(), otpauthUrl };
 };
 
+const safeEqual = (a: string, b: string): boolean => {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
+};
+
+// Accepts the previous, current and next 30s step to tolerate clock drift
 export const verify2FAToken = (token: string, secret: string): boolean => {
   if (!/^\d{6}$/.test(token)) return false;
-
-  const currentToken = generateTOTPToken(secret);
-  return token === currentToken;
+  return [-1, 0, 1].some((offset) => safeEqual(token, generateTOTPToken(secret, offset)));
 };
 
 export const generateBackupCodes = (): string[] => {
   return Array.from({ length: 10 }, () => crypto.randomBytes(4).toString("hex").toUpperCase());
 };
 
+export const hashBackupCode = (code: string): string =>
+  crypto.createHash("sha256").update(code.trim().toUpperCase()).digest("hex");
+
+// `hashedCodes` are the stored sha256 hashes; returns the hashes that remain unused
 export const useBackupCode = (
   code: string,
-  codes: string[]
+  hashedCodes: string[]
 ): { valid: boolean; remaining: string[] } => {
-  const index = codes.indexOf(code.toUpperCase());
-  if (index === -1) return { valid: false, remaining: codes };
+  const hashed = hashBackupCode(code);
+  const index = hashedCodes.findIndex((h) => safeEqual(h, hashed));
+  if (index === -1) return { valid: false, remaining: hashedCodes };
 
-  const remaining = codes.filter((_, i) => i !== index);
-  return { valid: true, remaining };
+  return { valid: true, remaining: hashedCodes.filter((_, i) => i !== index) };
 };

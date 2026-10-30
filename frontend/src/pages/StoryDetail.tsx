@@ -9,13 +9,14 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import {
   Star, BookOpen, Image, Tv, ArrowLeft, Play,
-  CheckCircle,
+  CheckCircle, Headphones, GitBranch,
 } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import ContentComments from "@/components/ContentComments";
 import StoryRelationships from "@/components/StoryRelationships";
+import StoryMap from "@/components/StoryMap";
 import ReportDialog from "@/components/ReportDialog";
 import { api } from "@/lib/api";
 import type {
@@ -29,7 +30,10 @@ type EpisodeRow = Pick<Episode, "id" | "title" | "episode_number" | "review_stat
 const typeIcons: Record<StoryType, typeof BookOpen> = {
   novel: BookOpen,
   manga: Image,
+  comic: Image,
   anime: Tv,
+  cartoon: Tv,
+  audiobook: Headphones,
 };
 
 const StoryDetail = () => {
@@ -384,6 +388,22 @@ const StoryDetail = () => {
                 })}
               </div>
             )}
+          </section>
+        )}
+
+        {story?.is_cyoa && chapters.length > 0 && (
+          <section>
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <GitBranch className="h-5 w-5 text-primary" /> Story Map
+            </h2>
+            <StoryMap
+              chapters={chapters}
+              getChapterHref={(chapterId) =>
+                story.type === "novel"
+                  ? `/read/novel/${story.id}/${chapterId}`
+                  : `/read/manga/${story.id}/${chapterId}`
+              }
+            />
           </section>
         )}
 

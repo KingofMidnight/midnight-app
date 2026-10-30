@@ -7,12 +7,12 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Link2, Trash2 } from "lucide-react";
-import type { RelationshipType } from "@/types/domain";
+import type { RelationshipType, StoryType } from "@/types/domain";
 
 interface RelatedStorySummary {
   id: string;
   title: string;
-  type: string;
+  type: StoryType;
 }
 
 interface OutgoingRelationship {

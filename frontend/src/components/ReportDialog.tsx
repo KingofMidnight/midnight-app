@@ -1,5 +1,7 @@
 ﻿import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import type { TablesInsert } from "@/integrations/supabase/types";
+import type { ReportType } from "@/types/domain";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,7 +40,7 @@ const ReportDialog = ({
   const { user } = useAuth();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
-  const [type, setType] = useState<string>("content");
+  const [type, setType] = useState<ReportType>("content");
   const [reason, setReason] = useState("");
   const [details, setDetails] = useState("");
   const [dmcaName, setDmcaName] = useState("");
@@ -52,7 +54,7 @@ const ReportDialog = ({
     if (!reason.trim()) return;
     setLoading(true);
 
-    const payload: Record<string, any> = {
+    const payload: TablesInsert<"reports"> = {
       reporter_id: user.id,
       report_type: type,
       story_id: storyId || null,
@@ -103,7 +105,7 @@ const ReportDialog = ({
           <DialogTitle>Submit a Report</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <Select value={type} onValueChange={setType}>
+          <Select value={type} onValueChange={(v) => setType(v as ReportType)}>
             <SelectTrigger className="bg-background border-border"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="content">Content Issue</SelectItem>

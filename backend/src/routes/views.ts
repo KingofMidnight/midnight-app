@@ -1,7 +1,7 @@
-﻿import { Router, Request, Response, NextFunction } from "express";
-import { z } from "zod";
+﻿import { Router, Request } from "express";
 import { supabaseAdmin } from "../config/supabase";
 import { createError } from "../middleware/errorHandler";
+import { asyncHandler, uuidParam, sendData } from "../utils/http";
 
 const router = Router();
 
@@ -19,69 +19,56 @@ function getClientIp(req: Request): string {
   return req.socket.remoteAddress ?? "unknown";
 }
 
+async function getViewCount(storyId: string): Promise<number> {
+  const { data: story, error } = await supabaseAdmin
+    .from("stories")
+    .select("view_count")
+    .eq("id", storyId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!story) throw createError("Story not found.", 404);
+  return story.view_count ?? 0;
+}
+
 router.post(
   "/stories/:storyId",
-  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const { storyId } = req.params;
-      if (!z.string().uuid().safeParse(storyId).success) throw createError("Invalid story id.", 400);
+  asyncHandler(async (req, res) => {
+    const storyId = uuidParam(req, "storyId");
+    const ip = getClientIp(req);
 
-      const ip = getClientIp(req);
+    const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-      const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: existing, error: lookupErr } = await supabaseAdmin
+      .from("story_views")
+      .select("id")
+      .eq("story_id", storyId)
+      .eq("ip_address", ip)
+      .gte("viewed_at", windowStart)
+      .limit(1);
 
-      const { data: existing, error: lookupErr } = await supabaseAdmin
-        .from("story_views")
-        .select("id")
-        .eq("story_id", storyId)
-        .eq("ip_address", ip)
-        .gte("viewed_at", windowStart)
-        .limit(1);
+    if (lookupErr) throw lookupErr;
 
-      if (lookupErr) throw createError(lookupErr.message, 500);
+    if (!existing?.length) {
+      const before = await getViewCount(storyId);
+      const { error: insertErr } = await supabaseAdmin.from("story_views").insert({ story_id: storyId, ip_address: ip });
+      if (insertErr) throw insertErr;
 
-      if (!existing?.length) {
-        await supabaseAdmin.from("story_views").insert({
-          story_id: storyId,
-          ip_address: ip,
-        });
+      const { error: rpcErr } = await supabaseAdmin.rpc("increment_story_view_count", { story_id_input: storyId });
+      if (rpcErr) throw rpcErr;
 
-        await supabaseAdmin.rpc("increment_story_view_count", { story_id_input: storyId });
-      }
-
-      const { data: story } = await supabaseAdmin
-        .from("stories")
-        .select("view_count")
-        .eq("id", storyId)
-        .single();
-
-      res.json({ success: true, data: { view_count: story?.view_count ?? 0 } });
-    } catch (err) {
-      next(err);
+      return sendData(res, { view_count: before + 1 });
     }
-  }
+
+    sendData(res, { view_count: await getViewCount(storyId) });
+  })
 );
 
 router.get(
   "/stories/:storyId",
-  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const { storyId } = req.params;
-
-      const { data: story, error } = await supabaseAdmin
-        .from("stories")
-        .select("view_count")
-        .eq("id", storyId)
-        .single();
-
-      if (error || !story) throw createError("Story not found.", 404);
-
-      res.json({ success: true, data: { view_count: story.view_count ?? 0 } });
-    } catch (err) {
-      next(err);
-    }
-  }
+  asyncHandler(async (req, res) => {
+    sendData(res, { view_count: await getViewCount(uuidParam(req, "storyId")) });
+  })
 );
 
 export default router;
-

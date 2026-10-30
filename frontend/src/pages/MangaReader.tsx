@@ -7,10 +7,11 @@ import { useAuth } from "@/hooks/useAuth";
 import GoogleAd from "@/components/GoogleAd";
 import { saveReadingProgress } from "@/services/progressService";
 import ContentComments from "@/components/ContentComments";
+import ChapterChoices from "@/components/ChapterChoices";
 import type { Story, Chapter } from "@/types/domain";
 
 type ChapterRow = Pick<Chapter, "id" | "chapter_number" | "title" | "review_status">;
-type StoryRow = Pick<Story, "id" | "title">;
+type StoryRow = Pick<Story, "id" | "title" | "is_cyoa">;
 
 const MangaReader = () => {
   const { storyId, chapterId } = useParams();
@@ -25,7 +26,7 @@ const MangaReader = () => {
     if (!storyId || !chapterId) return;
     const load = async () => {
       const [storyRes, chapRes, allChaps] = await Promise.all([
-        supabase.from("stories").select("id, title").eq("id", storyId).single(),
+        supabase.from("stories").select("id, title, is_cyoa").eq("id", storyId).single(),
         supabase.from("chapters").select("*").eq("id", chapterId).single(),
         supabase.from("chapters").select("id, chapter_number, title, review_status").eq("story_id", storyId).order("chapter_number"),
       ]);
@@ -52,6 +53,7 @@ const MangaReader = () => {
   const nextChap = currentIdx < chapters.length - 1 ? chapters[currentIdx + 1] : null;
 
   const goTo = (ch: ChapterRow) => navigate(`/read/manga/${storyId}/${ch.id}`);
+  const goToChapterId = (chapterIdToGo: string) => navigate(`/read/manga/${storyId}/${chapterIdToGo}`);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
 
@@ -96,25 +98,43 @@ const MangaReader = () => {
         <GoogleAd slot={import.meta.env.VITE_ADSENSE_MANGA_MOBILE_BOTTOM} format="horizontal" className="w-full" style={{ minHeight: "90px" }} />
       </div>
 
+      {story?.is_cyoa && chapter && (
+        <div className="max-w-3xl mx-auto px-4 py-6">
+          <ChapterChoices chapterId={chapter.id} onChoose={goToChapterId} />
+        </div>
+      )}
+
       <div className="border-t border-border">
         <div className="container py-4 flex justify-between gap-3">
-          <Button
-            variant="outline"
-            disabled={!prevChap}
-            onClick={() => prevChap && goTo(prevChap)}
-            className="gap-2 flex-1 sm:flex-none"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            {prevChap ? `Ch. ${prevChap.chapter_number}: ${prevChap.title}` : "Previous"}
-          </Button>
-          <Button
-            variant={!nextChap ? "outline" : "default"}
-            onClick={() => nextChap ? goTo(nextChap) : navigate(`/story/${storyId}`)}
-            className="gap-2 flex-1 sm:flex-none"
-          >
-            {nextChap ? `Ch. ${nextChap.chapter_number}: ${nextChap.title}` : "Back to Story"}
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+          {story?.is_cyoa ? (
+            <Button
+              variant="outline"
+              onClick={() => navigate(`/story/${storyId}`)}
+              className="gap-2 flex-1"
+            >
+              <ArrowLeft className="h-4 w-4" /> Back to Story
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                disabled={!prevChap}
+                onClick={() => prevChap && goTo(prevChap)}
+                className="gap-2 flex-1 sm:flex-none"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                {prevChap ? `Ch. ${prevChap.chapter_number}: ${prevChap.title}` : "Previous"}
+              </Button>
+              <Button
+                variant={!nextChap ? "outline" : "default"}
+                onClick={() => nextChap ? goTo(nextChap) : navigate(`/story/${storyId}`)}
+                className="gap-2 flex-1 sm:flex-none"
+              >
+                {nextChap ? `Ch. ${nextChap.chapter_number}: ${nextChap.title}` : "Back to Story"}
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </>
+          )}
         </div>
       </div>
 

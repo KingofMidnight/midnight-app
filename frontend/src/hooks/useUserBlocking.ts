@@ -1,6 +1,13 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
+// RLS also exposes rows where *I* am the one blocked, so every query is scoped to blocker_id = me.
+async function currentUserId(): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated.");
+  return user.id;
+}
+
 export const useUserBlocking = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -12,6 +19,7 @@ export const useUserBlocking = () => {
 
     try {
       const { error: err } = await supabase.from("user_blocks").insert({
+        blocker_id: await currentUserId(),
         blocked_id: userId,
         reason,
       });
@@ -34,7 +42,11 @@ export const useUserBlocking = () => {
     setError(null);
 
     try {
-      const { error: err } = await supabase.from("user_blocks").delete().eq("blocked_id", userId);
+      const { error: err } = await supabase
+        .from("user_blocks")
+        .delete()
+        .eq("blocker_id", await currentUserId())
+        .eq("blocked_id", userId);
 
       if (err) throw err;
 
@@ -54,6 +66,7 @@ export const useUserBlocking = () => {
       const { data } = await supabase
         .from("user_blocks")
         .select("id")
+        .eq("blocker_id", await currentUserId())
         .eq("blocked_id", userId)
         .maybeSingle();
 
@@ -65,7 +78,10 @@ export const useUserBlocking = () => {
 
   const fetchBlockedUsers = useCallback(async () => {
     try {
-      const { data } = await supabase.from("user_blocks").select("blocked_id");
+      const { data } = await supabase
+        .from("user_blocks")
+        .select("blocked_id")
+        .eq("blocker_id", await currentUserId());
       if (data) setBlockedUsers(data.map((b) => b.blocked_id));
     } catch (err) {
       console.error("Failed to fetch blocked users:", err);

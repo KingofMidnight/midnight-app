@@ -1,10 +1,12 @@
-import { Router, Request, Response } from "express";
+import { Router } from "express";
 import { z } from "zod";
 import { requireAuth, optionalAuth } from "../middleware/auth.js";
 import { commentLimiter } from "../middleware/rateLimiter.js";
 import { supabaseAdmin } from "../config/supabase.js";
+import { createError } from "../middleware/errorHandler.js";
 import { getBlockRelatedUsers } from "../utils/userBlocks.js";
 import { sanitizeCommentHtml, validateTextContent } from "../utils/validation.js";
+import { asyncHandler, parse, uuidParam, sendData } from "../utils/http.js";
 
 const router = Router();
 
@@ -15,8 +17,6 @@ const CreateCommentSchema = z.object({
 });
 
 const UpdateCommentSchema = z.object({ content: z.string().min(1).max(5000) });
-
-const UuidSchema = z.string().uuid();
 
 interface CommentNode {
   id: string;
@@ -62,23 +62,15 @@ const buildCommentTree = (comments: any[]): CommentNode[] => {
   return roots;
 };
 
-const sendError = (res: Response, error: unknown): void => {
-  if (error instanceof z.ZodError) {
-    res.status(400).json({ success: false, error: error.issues[0]?.message ?? "Invalid request." });
-    return;
-  }
-  res.status(500).json({ success: false, error: "Internal server error." });
-};
-
-const prepareContent = (content: string): { ok: true; html: string } | { ok: false; error: string } => {
+const prepareContent = (content: string): string => {
   const check = validateTextContent(content, 1, 5000);
-  if (!check.valid) return { ok: false, error: check.error ?? "Invalid content." };
+  if (!check.valid) throw createError(check.error ?? "Invalid content.", 400);
   const html = sanitizeCommentHtml(content);
-  if (!html.trim()) return { ok: false, error: "Comment is empty after sanitization." };
-  return { ok: true, html };
+  if (!html.trim()) throw createError("Comment is empty after sanitization.", 400);
+  return html;
 };
 
-async function ensureOwner(commentId: string, userId: string, res: Response): Promise<boolean> {
+async function ensureOwner(commentId: string, userId: string): Promise<void> {
   const { data, error } = await supabaseAdmin
     .from("comments")
     .select("user_id")
@@ -86,26 +78,17 @@ async function ensureOwner(commentId: string, userId: string, res: Response): Pr
     .maybeSingle();
 
   if (error) throw error;
-  if (!data) {
-    res.status(404).json({ success: false, error: "Comment not found." });
-    return false;
-  }
-  if (data.user_id !== userId) {
-    res.status(403).json({ success: false, error: "Not authorized." });
-    return false;
-  }
-  return true;
+  if (!data) throw createError("Comment not found.", 404);
+  if (data.user_id !== userId) throw createError("Not authorized.", 403);
 }
 
-router.post("/", requireAuth, commentLimiter, async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { storyId, content, parentCommentId } = CreateCommentSchema.parse(req.body);
-
-    const prepared = prepareContent(content);
-    if (!prepared.ok) {
-      res.status(400).json({ success: false, error: prepared.error });
-      return;
-    }
+router.post(
+  "/",
+  requireAuth,
+  commentLimiter,
+  asyncHandler(async (req, res) => {
+    const { storyId, content, parentCommentId } = parse(CreateCommentSchema, req.body);
+    const html = prepareContent(content);
 
     if (parentCommentId) {
       const { data: parent, error: parentErr } = await supabaseAdmin
@@ -114,10 +97,7 @@ router.post("/", requireAuth, commentLimiter, async (req: Request, res: Response
         .eq("id", parentCommentId)
         .maybeSingle();
       if (parentErr) throw parentErr;
-      if (!parent || parent.story_id !== storyId) {
-        res.status(400).json({ success: false, error: "Parent comment not found on this story." });
-        return;
-      }
+      if (!parent || parent.story_id !== storyId) throw createError("Parent comment not found on this story.", 400);
     }
 
     const { data, error } = await supabaseAdmin
@@ -125,7 +105,7 @@ router.post("/", requireAuth, commentLimiter, async (req: Request, res: Response
       .insert({
         story_id: storyId,
         user_id: req.user!.id,
-        content: prepared.html,
+        content: html,
         parent_comment_id: parentCommentId,
         is_approved: true,
       })
@@ -133,16 +113,15 @@ router.post("/", requireAuth, commentLimiter, async (req: Request, res: Response
       .single();
 
     if (error) throw error;
+    sendData(res, data, 201);
+  })
+);
 
-    res.status(201).json({ success: true, comment: data });
-  } catch (error) {
-    sendError(res, error);
-  }
-});
-
-router.get("/story/:storyId", optionalAuth, async (req: Request, res: Response): Promise<void> => {
-  try {
-    const storyId = UuidSchema.parse(req.params.storyId);
+router.get(
+  "/story/:storyId",
+  optionalAuth,
+  asyncHandler(async (req, res) => {
+    const storyId = uuidParam(req, "storyId");
     const hiddenUsers = req.user ? await getBlockRelatedUsers(req.user.id) : [];
 
     const { data, error } = await supabaseAdmin
@@ -154,56 +133,42 @@ router.get("/story/:storyId", optionalAuth, async (req: Request, res: Response):
 
     if (error) throw error;
 
-    const filtered = (data || []).filter((comment) => !hiddenUsers.includes(comment.user_id));
+    sendData(res, buildCommentTree((data || []).filter((c) => !hiddenUsers.includes(c.user_id))));
+  })
+);
 
-    res.json({ success: true, comments: buildCommentTree(filtered) });
-  } catch (error) {
-    sendError(res, error);
-  }
-});
-
-router.patch("/:commentId", requireAuth, async (req: Request, res: Response): Promise<void> => {
-  try {
-    const commentId = UuidSchema.parse(req.params.commentId);
-    const { content } = UpdateCommentSchema.parse(req.body);
-
-    const prepared = prepareContent(content);
-    if (!prepared.ok) {
-      res.status(400).json({ success: false, error: prepared.error });
-      return;
-    }
-
-    if (!(await ensureOwner(commentId, req.user!.id, res))) return;
+router.patch(
+  "/:commentId",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const commentId = uuidParam(req, "commentId");
+    const html = prepareContent(parse(UpdateCommentSchema, req.body).content);
+    await ensureOwner(commentId, req.user!.id);
 
     const { data, error } = await supabaseAdmin
       .from("comments")
-      .update({ content: prepared.html })
+      .update({ content: html })
       .eq("id", commentId)
       .select()
       .single();
 
     if (error) throw error;
+    sendData(res, data);
+  })
+);
 
-    res.json({ success: true, comment: data });
-  } catch (error) {
-    sendError(res, error);
-  }
-});
-
-router.delete("/:commentId", requireAuth, async (req: Request, res: Response): Promise<void> => {
-  try {
-    const commentId = UuidSchema.parse(req.params.commentId);
-
-    if (!(await ensureOwner(commentId, req.user!.id, res))) return;
+router.delete(
+  "/:commentId",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const commentId = uuidParam(req, "commentId");
+    await ensureOwner(commentId, req.user!.id);
 
     const { error } = await supabaseAdmin.from("comments").delete().eq("id", commentId);
-
     if (error) throw error;
 
-    res.json({ success: true });
-  } catch (error) {
-    sendError(res, error);
-  }
-});
+    sendData(res, { deleted: commentId });
+  })
+);
 
 export default router;

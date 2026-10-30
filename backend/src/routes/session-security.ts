@@ -1,26 +1,20 @@
-import { Router, Request, Response } from "express";
+import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
+import { createError } from "../middleware/errorHandler.js";
 import { terminateAllUserSessions } from "../utils/sessions.js";
+import { asyncHandler, sendData } from "../utils/http.js";
 
 const router = Router();
 
 router.post(
   "/session/terminate-all",
   requireAuth,
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const success = await terminateAllUserSessions(req.user!.id);
-      
-      if (!success) {
-        res.status(500).json({ success: false, error: "Failed to terminate all sessions." });
-        return;
-      }
-
-      res.json({ success: true, message: "All sessions terminated successfully." });
-    } catch (error) {
-      res.status(500).json({ success: false, error: "Internal server error." });
+  asyncHandler(async (req, res) => {
+    if (!(await terminateAllUserSessions(req.user!.id))) {
+      throw createError("Failed to terminate all sessions.", 500);
     }
-  }
+    sendData(res, { message: "All sessions terminated successfully." });
+  })
 );
 
 export default router;

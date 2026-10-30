@@ -419,7 +419,7 @@ const AdminContentReview = () => {
                   </div>
                   <div className="flex gap-2">
                     <Button asChild size="sm" variant="outline" className="gap-1">
-                      <Link to={`/read/${ch.stories?.type === 'manga' ? 'manga' : 'novel'}/${ch.stories?.id}/${ch.id}`}>
+                      <Link to={`/read/${ch.stories?.type === 'manga' ? 'manga' : 'novel'}/${ch.story_id}/${ch.id}`}>
                         <Eye className="h-3 w-3" /> View
                       </Link>
                     </Button>
@@ -446,7 +446,7 @@ const AdminContentReview = () => {
                   </div>
                   <div className="flex gap-2">
                     <Button asChild size="sm" variant="outline" className="gap-1">
-                      <Link to={`/watch/${ep.stories?.id}/${ep.id}`}>
+                      <Link to={`/watch/${ep.story_id}/${ep.id}`}>
                         <Eye className="h-3 w-3" /> View
                       </Link>
                     </Button>

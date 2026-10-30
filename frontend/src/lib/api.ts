@@ -121,37 +121,36 @@ export const api = {
     deleteUser: (userId: string) => apiDelete(`/api/admin/users/${userId}`),
   },
 
+  reviews: {
+    markHelpful: (reviewId: string) => apiPost(`/api/reviews/${reviewId}/helpful`),
+  },
+
   creator: {
     become: () => apiPost("/api/auth/creator", {}),
     leave: () => apiDelete("/api/auth/creator"),
   },
 
   twoFactor: {
-    setup: (email: string) =>
-      request<ApiResponse & TwoFactorSetup>("POST", "/api/auth/2fa/setup", { body: { email } }),
+    setup: () => apiPost<TwoFactorSetup & { otpauthUrl: string }>("/api/auth/2fa/setup"),
 
-    verifySetup: (token: string, secret: string) =>
-      request("POST", "/api/auth/2fa/verify-setup", { body: { token, secret } }),
+    verifySetup: (token: string) => apiPost<{ valid: boolean }>("/api/auth/2fa/verify-setup", { token }),
 
-    enable: (token: string, backupCodes: string[]) =>
-      request("POST", "/api/auth/2fa/enable", { body: { token, backupCodes } }),
+    enable: (token: string) => apiPost<{ enabled: boolean }>("/api/auth/2fa/enable", { token }),
 
-    verify: (token: string) => request("POST", "/api/auth/2fa/verify", { body: { token } }),
+    verify: (token: string) => apiPost<{ verified: boolean }>("/api/auth/2fa/verify", { token }),
 
-    useBackupCode: (code: string) =>
-      request<ApiResponse & { remainingCodes: number }>("POST", "/api/auth/2fa/backup-code", { body: { code } }),
+    useBackupCode: (code: string) => apiPost<{ remainingCodes: number }>("/api/auth/2fa/backup-code", { code }),
 
-    disable: () => request("POST", "/api/auth/2fa/disable"),
+    disable: (proof: { token: string } | { code: string }) =>
+      apiPost<{ enabled: boolean }>("/api/auth/2fa/disable", proof),
   },
 
   sessions: {
-    create: () => request<ApiResponse & { sessionId: string }>("POST", "/api/auth/session/create"),
+    create: () => apiPost<{ sessionId: string }>("/api/auth/session/create"),
 
-    validate: (sessionId: string) =>
-      request<ApiResponse & { valid: boolean }>("POST", "/api/auth/session/validate", { body: { sessionId } }),
+    validate: (sessionId: string) => apiPost<{ valid: boolean }>("/api/auth/session/validate", { sessionId }),
 
-    terminate: (sessionId: string) =>
-      request("POST", "/api/auth/session/terminate", { body: { sessionId } }),
+    terminate: (sessionId: string) => apiPost<{ terminated: string }>("/api/auth/session/terminate", { sessionId }),
   },
 
   async health(): Promise<boolean> {
@@ -165,7 +164,7 @@ export const api = {
 
   sessionSecurity: {
     terminateAllSessions: () =>
-      request<ApiResponse & { message: string }>("POST", "/api/session-security/session/terminate-all"),
+      request<ApiResponse<{ message: string }>>("POST", "/api/session-security/session/terminate-all"),
   },
 
   views: {

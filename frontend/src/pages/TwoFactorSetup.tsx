@@ -20,7 +20,7 @@ export default function TwoFactorSetup() {
   const handleSetup = async () => {
     if (!user?.email) return;
 
-    const setup = await setup2FA(user.email);
+    const setup = await setup2FA();
     if (setup) {
       setSecret(setup.secret);
       setBackupCodes(setup.backupCodes);
@@ -31,14 +31,14 @@ export default function TwoFactorSetup() {
   const handleVerify = async () => {
     if (!token || !secret) return;
 
-    const valid = await verify2FASetup(token, secret);
+    const valid = await verify2FASetup(token);
     if (valid) {
       setStep("backup");
     }
   };
 
   const handleEnable = async () => {
-    const success = await enable2FA(token, backupCodes);
+    const success = await enable2FA(token);
     if (success) {
       setSaved(true);
       setTimeout(() => navigate("/settings"), 2000);
@@ -103,7 +103,7 @@ export default function TwoFactorSetup() {
             <label className="block text-sm font-medium mb-2">Enter 6-digit code from app:</label>
             <Input
               type="text"
-              maxLength="6"
+              maxLength={6}
               placeholder="000000"
               value={token}
               onChange={(e) => setToken(e.target.value.replace(/\D/g, ""))}

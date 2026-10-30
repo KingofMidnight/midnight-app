@@ -1,61 +1,38 @@
-﻿import { Router, Request, Response, NextFunction } from "express";
+﻿import { Router, Response } from "express";
 import path from "path";
 import fs from "fs/promises";
 import { requireAuth } from "../middleware/auth";
 import { generateEpub, generateChapterPdf } from "../services/exportService";
-import { createError } from "../middleware/errorHandler";
+import { asyncHandler, uuidParam } from "../utils/http";
 
 const router = Router();
+
+async function sendAndDelete(res: Response, filePath: string, contentType: string): Promise<void> {
+  try {
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="${path.basename(filePath)}"`);
+    res.send(await fs.readFile(filePath));
+  } finally {
+    fs.unlink(filePath).catch(() => {});
+  }
+}
 
 router.get(
   "/epub/:storyId",
   requireAuth,
-  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const { storyId } = req.params;
-
-      if (!storyId) throw createError("storyId is required.", 400);
-
-      const filePath = await generateEpub(storyId);
-      const filename = path.basename(filePath);
-
-      res.setHeader("Content-Type", "application/epub+zip");
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-
-      const buffer = await fs.readFile(filePath);
-      res.send(buffer);
-
-      fs.unlink(filePath).catch(() => {});
-    } catch (err) {
-      next(err);
-    }
-  }
+  asyncHandler(async (req, res) => {
+    const filePath = await generateEpub(uuidParam(req, "storyId"));
+    await sendAndDelete(res, filePath, "application/epub+zip");
+  })
 );
 
 router.get(
   "/pdf/:chapterId",
   requireAuth,
-  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const { chapterId } = req.params;
-
-      if (!chapterId) throw createError("chapterId is required.", 400);
-
-      const filePath = await generateChapterPdf(chapterId);
-      const filename = path.basename(filePath);
-
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-
-      const buffer = await fs.readFile(filePath);
-      res.send(buffer);
-
-      fs.unlink(filePath).catch(() => {});
-    } catch (err) {
-      next(err);
-    }
-  }
+  asyncHandler(async (req, res) => {
+    const filePath = await generateChapterPdf(uuidParam(req, "chapterId"));
+    await sendAndDelete(res, filePath, "application/pdf");
+  })
 );
 
 export default router;
-

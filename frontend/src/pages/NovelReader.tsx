@@ -13,6 +13,7 @@ import { Slider } from "@/components/ui/slider";
 import { sanitizeChapterContent } from "@/utils/sanitize";
 import { saveReadingProgress } from "@/services/progressService";
 import ContentComments from "@/components/ContentComments";
+import ChapterChoices from "@/components/ChapterChoices";
 
 const fonts = [
   { label: "Overpass", value: "'Overpass', sans-serif" },
@@ -40,7 +41,7 @@ const NovelReader = () => {
   const { storyId, chapterId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [story, setStory] = useState<{ id: string; title: string } | null>(null);
+  const [story, setStory] = useState<{ id: string; title: string; is_cyoa: boolean } | null>(null);
   const [chapter, setChapter] = useState<ChapterFull | null>(null);
   const [chapters, setChapters] = useState<ChapterRow[]>([]);
   const [fontSize, setFontSize] = useState(18);
@@ -53,7 +54,7 @@ const NovelReader = () => {
     if (!storyId || !chapterId) return;
     const load = async () => {
       const [storyRes, chapRes, allChaps] = await Promise.all([
-        supabase.from("stories").select("id, title").eq("id", storyId).single(),
+        supabase.from("stories").select("id, title, is_cyoa").eq("id", storyId).single(),
         supabase.from("chapters").select("*").eq("id", chapterId).single(),
         supabase.from("chapters").select("id, chapter_number, title, review_status").eq("story_id", storyId).order("chapter_number"),
       ]);
@@ -78,6 +79,11 @@ const NovelReader = () => {
   const goTo = useCallback((ch: ChapterRow) => {
     window.scrollTo({ top: 0, behavior: "smooth" });
     navigate(`/read/novel/${storyId}/${ch.id}`);
+  }, [navigate, storyId]);
+
+  const goToChapterId = useCallback((chapterIdToGo: string) => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    navigate(`/read/novel/${storyId}/${chapterIdToGo}`);
   }, [navigate, storyId]);
 
   if (loading) return (
@@ -158,6 +164,12 @@ const NovelReader = () => {
         <GoogleAd slot={import.meta.env.VITE_ADSENSE_NOVEL_MOBILE_BOTTOM} format="horizontal" className="w-full" style={{ minHeight: "90px" }} />
       </div>
 
+      {story?.is_cyoa && chapter && (
+        <div className="container mx-auto py-6" style={{ maxWidth: `${maxWidth}px` }}>
+          <ChapterChoices chapterId={chapter.id} onChoose={goToChapterId} />
+        </div>
+      )}
+
       {chapter && (
         <div className="container mx-auto py-6" style={{ maxWidth: `${maxWidth}px` }}>
           <ContentComments storyId={chapter.story_id} chapterId={chapter.id} currentUserId={user?.id} title="Chapter Comments" />
@@ -166,23 +178,35 @@ const NovelReader = () => {
 
       <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm">
         <div className="container py-3 flex justify-between gap-3">
-          <Button
-            variant="outline"
-            disabled={!prevChap}
-            onClick={() => prevChap && goTo(prevChap)}
-            className="gap-2 flex-1 sm:flex-none"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            {prevChap ? `Ch. ${prevChap.chapter_number}: ${prevChap.title}` : "Previous"}
-          </Button>
-          <Button
-            variant={!nextChap ? "outline" : "default"}
-            onClick={() => nextChap ? goTo(nextChap) : navigate(`/story/${storyId}`)}
-            className="gap-2 flex-1 sm:flex-none"
-          >
-            {nextChap ? `Ch. ${nextChap.chapter_number}: ${nextChap.title}` : "Back to Story"}
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+          {story?.is_cyoa ? (
+            <Button
+              variant="outline"
+              onClick={() => navigate(`/story/${storyId}`)}
+              className="gap-2 flex-1"
+            >
+              <ArrowLeft className="h-4 w-4" /> Back to Story
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                disabled={!prevChap}
+                onClick={() => prevChap && goTo(prevChap)}
+                className="gap-2 flex-1 sm:flex-none"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                {prevChap ? `Ch. ${prevChap.chapter_number}: ${prevChap.title}` : "Previous"}
+              </Button>
+              <Button
+                variant={!nextChap ? "outline" : "default"}
+                onClick={() => nextChap ? goTo(nextChap) : navigate(`/story/${storyId}`)}
+                className="gap-2 flex-1 sm:flex-none"
+              >
+                {nextChap ? `Ch. ${nextChap.chapter_number}: ${nextChap.title}` : "Back to Story"}
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </div>

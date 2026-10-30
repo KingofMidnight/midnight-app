@@ -1,230 +1,184 @@
-import { Router, Request, Response } from "express";
+import { Router } from "express";
 import { z } from "zod";
-import { requireAuth } from "../middleware/auth.js";
-import { authLimiter } from "../middleware/rateLimiter.js";
+import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { authLimiter, twoFactorLimiter } from "../middleware/rateLimiter.js";
 import { supabaseAdmin } from "../config/supabase.js";
+import { createError } from "../middleware/errorHandler.js";
 import {
   generate2FASecret,
   verify2FAToken,
-  generateBackupCodes,
+  hashBackupCode,
   useBackupCode,
 } from "../utils/twoFactorAuth.js";
 import { createSession, validateSession, terminateSession, cleanupExpiredSessions } from "../utils/sessions.js";
+import { asyncHandler, parse, sendData } from "../utils/http.js";
 
 const router = Router();
 
-const Setup2FASchema = z.object({
-  email: z.string().email(),
-});
-
-const Verify2FASchema = z.object({
-  token: z.string().regex(/^\d{6}$/),
-  secret: z.string(),
-});
-
-const Enable2FASchema = z.object({
-  token: z.string().regex(/^\d{6}$/),
-  backupCodes: z.array(z.string()),
-});
-
-const Verify2FATokenSchema = z.object({
-  token: z.string().regex(/^\d{6}$/),
+const TokenSchema = z.object({
+  token: z.string().regex(/^\d{6}$/, "Token must be 6 digits."),
 });
 
 const UseBackupCodeSchema = z.object({
-  code: z.string(),
+  code: z.string().trim().min(1).max(32),
 });
 
-const VerifySessionSchema = z.object({
+const Disable2FASchema = z
+  .object({
+    token: z.string().regex(/^\d{6}$/).optional(),
+    code: z.string().trim().min(1).max(32).optional(),
+  })
+  .refine((v) => v.token || v.code, "Provide a 2FA token or a backup code.");
+
+const SessionSchema = z.object({
   sessionId: z.string().uuid(),
 });
 
+async function get2FARecord(userId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("user_2fa_secrets")
+    .select("secret, is_enabled, backup_codes")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+async function requireEnabled2FA(userId: string) {
+  const record = await get2FARecord(userId);
+  if (!record?.is_enabled) throw createError("2FA not enabled.", 400);
+  return record;
+}
+
+// Generates a new secret + backup codes and stores them (not yet enabled).
+// The plaintext backup codes are returned exactly once; only hashes are stored.
 router.post(
   "/2fa/setup",
   authLimiter,
   requireAuth,
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { email } = Setup2FASchema.parse(req.body);
+  asyncHandler(async (req, res) => {
+    if (!req.user?.email) throw createError("Email not found in token.", 400);
 
-      if (!req.user?.email) {
-        res.status(400).json({ success: false, error: "Email not found in token." });
-        return;
-      }
-
-      const setup = await generate2FASecret(req.user.email);
-
-      res.json({
-        success: true,
-        secret: setup.secret,
-        manualEntryKey: setup.manualEntryKey,
-        backupCodes: setup.backupCodes,
-      });
-    } catch (error) {
-      res.status(400).json({ success: false, error: "Invalid request." });
+    if ((await get2FARecord(req.user.id))?.is_enabled) {
+      throw createError("2FA is already enabled. Disable it first.", 409);
     }
-  }
+
+    const setup = await generate2FASecret(req.user.email);
+
+    const { error } = await supabaseAdmin.from("user_2fa_secrets").upsert(
+      {
+        user_id: req.user.id,
+        secret: setup.secret,
+        is_enabled: false,
+        backup_codes: setup.backupCodes.map(hashBackupCode),
+      },
+      { onConflict: "user_id" }
+    );
+    if (error) throw error;
+
+    sendData(res, {
+      secret: setup.secret,
+      manualEntryKey: setup.manualEntryKey,
+      otpauthUrl: setup.otpauthUrl,
+      backupCodes: setup.backupCodes,
+    });
+  })
 );
 
+// Checks a token against the pending (stored) secret. Any client-sent secret is ignored.
 router.post(
   "/2fa/verify-setup",
-  authLimiter,
   requireAuth,
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { token, secret } = Verify2FASchema.parse(req.body);
+  twoFactorLimiter,
+  asyncHandler(async (req, res) => {
+    const { token } = parse(TokenSchema, req.body);
+    const record = await get2FARecord(req.user!.id);
 
-      const isValid = verify2FAToken(token, secret);
-      if (!isValid) {
-        res.status(400).json({ success: false, error: "Invalid token." });
-        return;
-      }
+    if (!record) throw createError("Setup not found.", 400);
+    if (!verify2FAToken(token, record.secret)) throw createError("Invalid token.", 400);
 
-      res.json({ success: true, valid: true });
-    } catch (error) {
-      res.status(400).json({ success: false, error: "Invalid request." });
-    }
-  }
+    sendData(res, { valid: true });
+  })
 );
 
 router.post(
   "/2fa/enable",
-  authLimiter,
   requireAuth,
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { token, backupCodes } = Enable2FASchema.parse(req.body);
+  twoFactorLimiter,
+  asyncHandler(async (req, res) => {
+    const { token } = parse(TokenSchema, req.body);
+    const record = await get2FARecord(req.user!.id);
 
-      const { data: secrets } = await supabaseAdmin
-        .from("user_2fa_secrets")
-        .select("secret")
-        .eq("user_id", req.user!.id)
-        .maybeSingle();
+    if (!record) throw createError("Setup not found.", 400);
+    if (record.is_enabled) throw createError("2FA is already enabled.", 409);
+    if (!verify2FAToken(token, record.secret)) throw createError("Invalid token.", 400);
 
-      if (!secrets) {
-        res.status(400).json({ success: false, error: "Setup not found." });
-        return;
-      }
+    const { error } = await supabaseAdmin
+      .from("user_2fa_secrets")
+      .update({ is_enabled: true })
+      .eq("user_id", req.user!.id);
+    if (error) throw error;
 
-      if (!verify2FAToken(token, secrets.secret)) {
-        res.status(400).json({ success: false, error: "Invalid token." });
-        return;
-      }
-
-      const { error } = await supabaseAdmin
-        .from("user_2fa_secrets")
-        .update({ is_enabled: true, backup_codes: backupCodes })
-        .eq("user_id", req.user!.id);
-
-      if (error) {
-        res.status(500).json({ success: false, error: "Failed to enable 2FA." });
-        return;
-      }
-
-      res.json({ success: true, message: "2FA enabled successfully." });
-    } catch (error) {
-      res.status(400).json({ success: false, error: "Invalid request." });
-    }
-  }
+    sendData(res, { enabled: true });
+  })
 );
 
 router.post(
   "/2fa/verify",
-  authLimiter,
   requireAuth,
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { token } = Verify2FATokenSchema.parse(req.body);
+  twoFactorLimiter,
+  asyncHandler(async (req, res) => {
+    const { token } = parse(TokenSchema, req.body);
+    const record = await requireEnabled2FA(req.user!.id);
 
-      const { data: secrets } = await supabaseAdmin
-        .from("user_2fa_secrets")
-        .select("secret")
-        .eq("user_id", req.user!.id)
-        .eq("is_enabled", true)
-        .maybeSingle();
+    if (!verify2FAToken(token, record.secret)) throw createError("Invalid token.", 400);
 
-      if (!secrets) {
-        res.status(400).json({ success: false, error: "2FA not enabled." });
-        return;
-      }
-
-      const isValid = verify2FAToken(token, secrets.secret);
-      if (!isValid) {
-        res.status(400).json({ success: false, error: "Invalid token." });
-        return;
-      }
-
-      res.json({ success: true, verified: true });
-    } catch (error) {
-      res.status(400).json({ success: false, error: "Invalid request." });
-    }
-  }
+    sendData(res, { verified: true });
+  })
 );
 
 router.post(
   "/2fa/backup-code",
-  authLimiter,
   requireAuth,
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { code } = UseBackupCodeSchema.parse(req.body);
+  twoFactorLimiter,
+  asyncHandler(async (req, res) => {
+    const { code } = parse(UseBackupCodeSchema, req.body);
+    const record = await requireEnabled2FA(req.user!.id);
 
-      const { data: secrets } = await supabaseAdmin
-        .from("user_2fa_secrets")
-        .select("backup_codes")
-        .eq("user_id", req.user!.id)
-        .eq("is_enabled", true)
-        .maybeSingle();
+    const { valid, remaining } = useBackupCode(code, record.backup_codes ?? []);
+    if (!valid) throw createError("Invalid backup code.", 400);
 
-      if (!secrets) {
-        res.status(400).json({ success: false, error: "2FA not enabled." });
-        return;
-      }
+    const { error } = await supabaseAdmin
+      .from("user_2fa_secrets")
+      .update({ backup_codes: remaining })
+      .eq("user_id", req.user!.id);
+    if (error) throw error;
 
-      const { valid, remaining } = useBackupCode(code, secrets.backup_codes || []);
-      if (!valid) {
-        res.status(400).json({ success: false, error: "Invalid backup code." });
-        return;
-      }
-
-      const { error } = await supabaseAdmin
-        .from("user_2fa_secrets")
-        .update({ backup_codes: remaining })
-        .eq("user_id", req.user!.id);
-
-      if (error) {
-        res.status(500).json({ success: false, error: "Failed to use backup code." });
-        return;
-      }
-
-      res.json({ success: true, remainingCodes: remaining.length });
-    } catch (error) {
-      res.status(400).json({ success: false, error: "Invalid request." });
-    }
-  }
+    sendData(res, { remainingCodes: remaining.length });
+  })
 );
 
+// Requires a current TOTP token or an unused backup code, so a stolen access
+// token alone can't turn 2FA off.
 router.post(
   "/2fa/disable",
-  authLimiter,
   requireAuth,
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { error } = await supabaseAdmin
-        .from("user_2fa_secrets")
-        .update({ is_enabled: false })
-        .eq("user_id", req.user!.id);
+  twoFactorLimiter,
+  asyncHandler(async (req, res) => {
+    const { token, code } = parse(Disable2FASchema, req.body ?? {});
+    const record = await requireEnabled2FA(req.user!.id);
 
-      if (error) {
-        res.status(500).json({ success: false, error: "Failed to disable 2FA." });
-        return;
-      }
+    const proven = token
+      ? verify2FAToken(token, record.secret)
+      : useBackupCode(code!, record.backup_codes ?? []).valid;
+    if (!proven) throw createError("Invalid token or backup code.", 400);
 
-      res.json({ success: true, message: "2FA disabled." });
-    } catch (error) {
-      res.status(500).json({ success: false, error: "Internal server error." });
-    }
-  }
+    const { error } = await supabaseAdmin.from("user_2fa_secrets").delete().eq("user_id", req.user!.id);
+    if (error) throw error;
+
+    sendData(res, { enabled: false });
+  })
 );
 
 async function hasActiveBan(userId: string): Promise<boolean> {
@@ -243,126 +197,81 @@ router.post(
   "/creator",
   authLimiter,
   requireAuth,
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      if (await hasActiveBan(req.user!.id)) {
-        res.status(403).json({ success: false, error: "Banned accounts cannot become creators." });
-        return;
-      }
+  asyncHandler(async (req, res) => {
+    if (await hasActiveBan(req.user!.id)) throw createError("Banned accounts cannot become creators.", 403);
 
-      const { error } = await supabaseAdmin
-        .from("user_roles")
-        .upsert(
-          { user_id: req.user!.id, role: "creator" },
-          { onConflict: "user_id,role", ignoreDuplicates: true }
-        );
+    const { error } = await supabaseAdmin
+      .from("user_roles")
+      .upsert({ user_id: req.user!.id, role: "creator" }, { onConflict: "user_id,role", ignoreDuplicates: true });
+    if (error) throw error;
 
-      if (error) throw error;
-
-      res.json({ success: true, data: { role: "creator" } });
-    } catch (error) {
-      res.status(500).json({ success: false, error: "Failed to grant creator role." });
-    }
-  }
+    sendData(res, { role: "creator" });
+  })
 );
 
 router.delete(
   "/creator",
   authLimiter,
   requireAuth,
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { error: roleErr } = await supabaseAdmin
-        .from("user_roles")
-        .delete()
-        .eq("user_id", req.user!.id)
-        .eq("role", "creator");
+  asyncHandler(async (req, res) => {
+    const { error: roleErr } = await supabaseAdmin
+      .from("user_roles")
+      .delete()
+      .eq("user_id", req.user!.id)
+      .eq("role", "creator");
+    if (roleErr) throw roleErr;
 
-      if (roleErr) throw roleErr;
+    const { error: archiveErr } = await supabaseAdmin
+      .from("stories")
+      .update({ review_status: "archived" })
+      .eq("created_by", req.user!.id)
+      .eq("review_status", "approved");
+    if (archiveErr) throw archiveErr;
 
-      const { error: archiveErr } = await supabaseAdmin
-        .from("stories")
-        .update({ review_status: "archived" })
-        .eq("created_by", req.user!.id)
-        .eq("review_status", "approved");
-
-      if (archiveErr) throw archiveErr;
-
-      res.json({ success: true, data: { role: null } });
-    } catch (error) {
-      res.status(500).json({ success: false, error: "Failed to remove creator role." });
-    }
-  }
+    sendData(res, { role: null });
+  })
 );
 
 router.post(
   "/session/create",
   authLimiter,
   requireAuth,
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const ipAddress = (req.ip || "unknown").toString();
-      const userAgent = req.get("user-agent") || "unknown";
+  asyncHandler(async (req, res) => {
+    const sessionId = await createSession(req.user!.id, (req.ip || "unknown").toString(), req.get("user-agent") || "unknown");
+    if (!sessionId) throw createError("Failed to create session.", 500);
 
-      const sessionId = await createSession(req.user!.id, ipAddress, userAgent);
-      if (!sessionId) {
-        res.status(500).json({ success: false, error: "Failed to create session." });
-        return;
-      }
-
-      res.json({ success: true, sessionId });
-    } catch (error) {
-      res.status(500).json({ success: false, error: "Internal server error." });
-    }
-  }
+    sendData(res, { sessionId });
+  })
 );
 
 router.post(
   "/session/validate",
   requireAuth,
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { sessionId } = VerifySessionSchema.parse(req.body);
-      const isValid = await validateSession(sessionId);
-
-      res.json({ success: true, valid: isValid });
-    } catch (error) {
-      res.status(400).json({ success: false, error: "Invalid request." });
-    }
-  }
+  asyncHandler(async (req, res) => {
+    const { sessionId } = parse(SessionSchema, req.body);
+    sendData(res, { valid: await validateSession(sessionId, req.user!.id) });
+  })
 );
 
 router.post(
   "/session/terminate",
   requireAuth,
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { sessionId } = VerifySessionSchema.parse(req.body);
-      const success = await terminateSession(sessionId);
+  asyncHandler(async (req, res) => {
+    const { sessionId } = parse(SessionSchema, req.body);
+    if (!(await terminateSession(sessionId, req.user!.id))) throw createError("Session not found.", 404);
 
-      if (!success) {
-        res.status(500).json({ success: false, error: "Failed to terminate session." });
-        return;
-      }
-
-      res.json({ success: true });
-    } catch (error) {
-      res.status(400).json({ success: false, error: "Invalid request." });
-    }
-  }
+    sendData(res, { terminated: sessionId });
+  })
 );
 
 router.post(
   "/session/cleanup",
   requireAuth,
-  async (_req: Request, res: Response): Promise<void> => {
-    try {
-      await cleanupExpiredSessions();
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ success: false, error: "Cleanup failed." });
-    }
-  }
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    await cleanupExpiredSessions();
+    sendData(res, { cleaned: true });
+  })
 );
 
 export default router;

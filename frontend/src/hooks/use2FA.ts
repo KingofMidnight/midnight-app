@@ -5,6 +5,7 @@ interface TwoFactorSetup {
   secret: string;
   manualEntryKey: string;
   backupCodes: string[];
+  otpauthUrl: string;
 }
 
 export const use2FA = () => {
@@ -25,22 +26,25 @@ export const use2FA = () => {
   }, []);
 
   const setup2FA = useCallback(
-    async (email: string): Promise<TwoFactorSetup | null> => {
-      const res = await run(() => api.twoFactor.setup(email), "Setup failed");
-      return res && { secret: res.secret, manualEntryKey: res.manualEntryKey, backupCodes: res.backupCodes };
+    async (): Promise<TwoFactorSetup | null> => {
+      const res = await run(() => api.twoFactor.setup(), "Setup failed");
+      return res && {
+        secret: res.secret,
+        manualEntryKey: res.manualEntryKey,
+        backupCodes: res.backupCodes,
+        otpauthUrl: res.otpauthUrl,
+      };
     },
     [run]
   );
 
   const verify2FASetup = useCallback(
-    async (token: string, secret: string) =>
-      (await run(() => api.twoFactor.verifySetup(token, secret), "Verification failed")) !== null,
+    async (token: string) => (await run(() => api.twoFactor.verifySetup(token), "Verification failed")) !== null,
     [run]
   );
 
   const enable2FA = useCallback(
-    async (token: string, backupCodes: string[]) =>
-      (await run(() => api.twoFactor.enable(token, backupCodes), "Enable failed")) !== null,
+    async (token: string) => (await run(() => api.twoFactor.enable(token), "Enable failed")) !== null,
     [run]
   );
 
@@ -55,7 +59,10 @@ export const use2FA = () => {
   );
 
   const disable2FA = useCallback(
-    async () => (await run(() => api.twoFactor.disable(), "Disable failed")) !== null,
+    async (tokenOrBackupCode: string) => {
+      const proof = /^\d{6}$/.test(tokenOrBackupCode) ? { token: tokenOrBackupCode } : { code: tokenOrBackupCode };
+      return (await run(() => api.twoFactor.disable(proof), "Disable failed")) !== null;
+    },
     [run]
   );
 

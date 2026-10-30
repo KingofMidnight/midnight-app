@@ -1,4 +1,5 @@
 ﻿import { Request, Response, NextFunction } from "express";
+import { ZodError } from "zod";
 
 export interface AppError extends Error {
   statusCode?: number;
@@ -11,15 +12,21 @@ export const errorHandler = (
   res: Response,
   _next: NextFunction
 ): void => {
-  const statusCode = err.statusCode ?? 500;
-  const message = err.message ?? "Internal Server Error";
+  if (err instanceof ZodError) {
+    err = createError(err.issues[0]?.message ?? "Invalid request.", 400, err.flatten());
+  }
 
-  console.error(`[ERROR] ${statusCode} â€” ${message}`, err.details ?? "");
+  const statusCode = err.statusCode ?? 500;
+  const isDev = process.env.NODE_ENV === "development";
+  // Don't leak database / internal error text to clients outside development
+  const message = statusCode >= 500 && !isDev ? "Internal server error." : err.message || "Internal Server Error";
+
+  console.error(`[ERROR] ${statusCode} — ${err.message}`, err.details ?? "");
 
   res.status(statusCode).json({
     success: false,
     error: message,
-    ...(process.env.NODE_ENV === "development" && {
+    ...(isDev && {
       stack: err.stack,
       details: err.details,
     }),
@@ -39,4 +46,3 @@ export const createError = (message: string, statusCode = 500, details?: unknown
   err.details = details;
   return err;
 };
-

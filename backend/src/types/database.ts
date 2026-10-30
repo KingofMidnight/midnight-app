@@ -13,6 +13,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      chapter_choices: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          sort_order: number
+          source_chapter_id: string
+          target_chapter_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          sort_order?: number
+          source_chapter_id: string
+          target_chapter_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          sort_order?: number
+          source_chapter_id?: string
+          target_chapter_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chapter_choices_source_chapter_id_fkey"
+            columns: ["source_chapter_id"]
+            isOneToOne: false
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chapter_choices_target_chapter_id_fkey"
+            columns: ["target_chapter_id"]
+            isOneToOne: false
+            referencedRelation: "chapters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chapters: {
         Row: {
           chapter_number: number
@@ -483,6 +525,7 @@ export type Database = {
           description: string | null
           genres: string[] | null
           id: string
+          is_cyoa: boolean
           review_status: string
           status: Database["public"]["Enums"]["story_status"]
           tags: string[] | null
@@ -502,6 +545,7 @@ export type Database = {
           description?: string | null
           genres?: string[] | null
           id?: string
+          is_cyoa?: boolean
           review_status?: string
           status?: Database["public"]["Enums"]["story_status"]
           tags?: string[] | null
@@ -521,6 +565,7 @@ export type Database = {
           description?: string | null
           genres?: string[] | null
           id?: string
+          is_cyoa?: boolean
           review_status?: string
           status?: Database["public"]["Enums"]["story_status"]
           tags?: string[] | null

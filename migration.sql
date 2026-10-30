@@ -178,8 +178,10 @@ CREATE TABLE IF NOT EXISTS public.comments (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_comments_chapter_id ON public.comments(chapter_id);
-CREATE INDEX IF NOT EXISTS idx_comments_episode_id ON public.comments(episode_id);
+-- Indexes for chapter_id/episode_id are created later, after the ALTER TABLE
+-- upgrade block that adds these columns to pre-existing databases. Creating
+-- them here would fail on a database where public.comments already existed
+-- without these columns (CREATE TABLE IF NOT EXISTS is a no-op in that case).
 
 -- ── ratings ───────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.ratings (
@@ -956,6 +958,77 @@ CREATE POLICY "story_relationships_manage_own"
   WITH CHECK (EXISTS (
     SELECT 1 FROM public.stories WHERE id = source_story_id AND created_by = auth.uid()
   ));
+
+-- ── CYOA branching ────────────────────────────────────────────────────────────
+-- Marks a story as using choice-based (CYOA) branching between chapters.
+ALTER TABLE public.stories
+  ADD COLUMN IF NOT EXISTS is_cyoa boolean NOT NULL DEFAULT false;
+
+-- Each row is one reader-facing choice at the end of a chapter, pointing to
+-- whichever chapter it leads to. Multiple choices can point back to the same
+-- target chapter (branches re-converging), and a chapter can have zero
+-- choices (a branch ending).
+CREATE TABLE IF NOT EXISTS public.chapter_choices (
+  id                uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_chapter_id uuid        NOT NULL REFERENCES public.chapters(id) ON DELETE CASCADE,
+  target_chapter_id uuid        NOT NULL REFERENCES public.chapters(id) ON DELETE CASCADE,
+  label             text        NOT NULL,
+  sort_order        integer     NOT NULL DEFAULT 0,
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT chapter_choices_no_self_link CHECK (source_chapter_id <> target_chapter_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_chapter_choices_source ON public.chapter_choices(source_chapter_id);
+CREATE INDEX IF NOT EXISTS idx_chapter_choices_target ON public.chapter_choices(target_chapter_id);
+
+ALTER TABLE public.chapter_choices ENABLE ROW LEVEL SECURITY;
+
+-- Readers can see choices leading out of any approved chapter.
+DROP POLICY IF EXISTS "chapter_choices_select_approved" ON public.chapter_choices;
+CREATE POLICY "chapter_choices_select_approved"
+  ON public.chapter_choices FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM public.chapters
+    WHERE chapters.id = chapter_choices.source_chapter_id
+      AND chapters.review_status = 'approved'
+  ));
+
+-- Creators can see/manage choices on their own stories regardless of status.
+DROP POLICY IF EXISTS "chapter_choices_select_own" ON public.chapter_choices;
+CREATE POLICY "chapter_choices_select_own"
+  ON public.chapter_choices FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM public.chapters c
+    JOIN public.stories s ON s.id = c.story_id
+    WHERE c.id = chapter_choices.source_chapter_id
+      AND s.created_by = auth.uid()
+  ));
+
+DROP POLICY IF EXISTS "chapter_choices_select_admin" ON public.chapter_choices;
+CREATE POLICY "chapter_choices_select_admin"
+  ON public.chapter_choices FOR SELECT
+  USING (public.is_admin(auth.uid()));
+
+DROP POLICY IF EXISTS "chapter_choices_all_own" ON public.chapter_choices;
+CREATE POLICY "chapter_choices_all_own"
+  ON public.chapter_choices FOR ALL
+  USING (EXISTS (
+    SELECT 1 FROM public.chapters c
+    JOIN public.stories s ON s.id = c.story_id
+    WHERE c.id = chapter_choices.source_chapter_id
+      AND s.created_by = auth.uid()
+  ))
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM public.chapters c
+    JOIN public.stories s ON s.id = c.story_id
+    WHERE c.id = chapter_choices.source_chapter_id
+      AND s.created_by = auth.uid()
+  ));
+
+DROP POLICY IF EXISTS "chapter_choices_all_admin" ON public.chapter_choices;
+CREATE POLICY "chapter_choices_all_admin"
+  ON public.chapter_choices FOR ALL
+  USING (public.is_admin(auth.uid()));
 
 -- ── Done ──────────────────────────────────────────────────────────────────────
 -- Insert your first admin after running:

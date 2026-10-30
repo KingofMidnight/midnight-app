@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs/promises";
 import { requireAuth } from "../middleware/auth.js";
 import { validateImageUrl } from "../utils/validation.js";
+import { safeGet, SafeFetchError } from "../utils/safeFetch.js";
 
 const router = Router();
 
@@ -103,70 +104,57 @@ router.get("/proxy/image", async (req: Request, res: Response): Promise<void> =>
       return;
     }
     
-    const response = await fetch(urlValidation.sanitized!, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; ImageProxy/1.0)'
-      }
-    });
-    
-    if (!response.ok) {
-      res.status(response.status).json({ 
-        success: false, 
-        error: `Failed to fetch image: ${response.statusText}` 
-      });
+    const upstream = await safeGet(urlValidation.sanitized!);
+
+    if (upstream.statusCode !== 200) {
+      upstream.resume();
+      res.status(502).json({ success: false, error: `Upstream returned ${upstream.statusCode}` });
       return;
     }
-    
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.startsWith('image/')) {
-      res.status(400).json({ success: false, error: "URL does not point to an image" });
+
+    const contentType = String(upstream.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
+    if (!PROXY_IMAGE_TYPES.has(contentType)) {
+      upstream.destroy();
+      res.status(400).json({ success: false, error: "URL does not point to a supported image" });
       return;
     }
-    
+
+    const declared = Number(upstream.headers['content-length'] ?? 0);
+    if (declared > MAX_PROXY_BYTES) {
+      upstream.destroy();
+      res.status(413).json({ success: false, error: "Image too large" });
+      return;
+    }
+
     res.setHeader('Content-Type', contentType);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Content-Security-Policy', "default-src 'none'");
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.setHeader('Cache-Control', 'public, max-age=86400');
-    
-    if (response.body) {
-      const reader = response.body.getReader();
-      const stream = new ReadableStream({
-        async start(controller) {
-          try {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              controller.enqueue(value);
-            }
-          } catch (error) {
-            controller.error(error);
-          } finally {
-            reader.releaseLock();
-          }
-        }
-      });
-      
-      stream.pipeTo(new WritableStream({
-        write(chunk) {
-          res.write(chunk);
-        },
-        close() {
-          res.end();
-        }
-      }));
-    } else {
-      res.end();
-    }
-    
+
+    let received = 0;
+    upstream.on('data', (chunk: Buffer) => {
+      received += chunk.length;
+      if (received > MAX_PROXY_BYTES) {
+        upstream.destroy();
+        res.destroy();
+      }
+    });
+    upstream.on('error', () => res.destroy());
+    upstream.pipe(res);
   } catch (error) {
     if (!res.headersSent) {
-      res.status(500).json({ success: false, error: "Proxy error" });
+      const status = error instanceof SafeFetchError ? error.status : 500;
+      res.status(status).json({ success: false, error: error instanceof SafeFetchError ? error.message : "Proxy error" });
     }
   }
 });
 
+const MAX_PROXY_BYTES = 10 * 1024 * 1024;
+const PROXY_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+// Raster images only: SVG/JS/CSS/HTML-like types could be used for stored XSS
 function getContentType(ext: string): string | null {
   const contentTypes: Record<string, string> = {
     '.jpg': 'image/jpeg',
@@ -174,13 +162,8 @@ function getContentType(ext: string): string | null {
     '.png': 'image/png',
     '.webp': 'image/webp',
     '.gif': 'image/gif',
-    '.svg': 'image/svg+xml',
-    '.pdf': 'application/pdf',
-    '.txt': 'text/plain',
-    '.css': 'text/css',
-    '.js': 'application/javascript'
   };
-  
+
   return contentTypes[ext] || null;
 }
 
