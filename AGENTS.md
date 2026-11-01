@@ -19,6 +19,7 @@
 - CYOA (choice-based stories): `stories.is_cyoa` + `chapter_choices`; UI in `ChapterChoices.tsx`, `StoryMap.tsx`, `ContentEditor.tsx` (ported from the `AI-main` branch).
 - Moderation is post-moderation: creators publish directly; reports drive review. DB triggers (`migration_004`) keep admin takedowns (`review_status = 'rejected'`) locked for creators and block writes from timed-out users (`user_moderation_actions`, type `timeout`; `warning` reserved for the upcoming warning/message system).
 - CYOA choices must stay within one story (DB trigger) and are only shown to readers when both chapters are published. Uploads: images only (`frontend/src/lib/uploads.ts` mirrors the bucket limits: covers 5 MB under `<user id>/`, manga pages 10 MB under `<story id>/`, owner/admin only).
+- PDF export uses puppeteer 25 with `headless: "shell"`; install the browser once per machine/server with `cd backend && npx puppeteer browsers install chrome-headless-shell` (install scripts are disabled, so npm won't download it).
 - Dependencies: when updating, use `npm audit fix --before=<date 7+ days ago> --ignore-scripts` so no freshly published versions are pulled in.
 - Reports are created only via `POST /api/reports` (validation, per-account rate limit, duplicate/self-report checks); `migration_005` removes the direct client INSERT policy.
 - Client IPs: always use `req.ip`; set `TRUST_PROXY` (number of proxy hops) in `backend/.env` when deployed behind a proxy. Never read `X-Forwarded-For` / `CF-Connecting-IP` directly.

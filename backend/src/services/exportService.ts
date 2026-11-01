@@ -105,8 +105,10 @@ export async function generateChapterPdf(chapterId: string): Promise<string> {
 
   const puppeteer = await import("puppeteer");
   // Only disable Chromium's sandbox where it can't run (e.g. root in Docker)
+  // "shell" = the lightweight chrome-headless-shell build, which is all PDF rendering needs.
+  // Install it with: npx puppeteer browsers install chrome-headless-shell
   const browser = await puppeteer.default.launch({
-    headless: true,
+    headless: "shell",
     args: process.env.PUPPETEER_NO_SANDBOX === "true" ? ["--no-sandbox", "--disable-setuid-sandbox"] : [],
   });
 
