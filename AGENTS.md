@@ -3,7 +3,7 @@
 ## Layout
 - `backend/` Express + TypeScript API. Entry: `backend/index.ts`. Port comes from `PORT` in `backend/.env` (currently 3000; code default 3001).
 - `frontend/` React + Vite (port 8080). All backend calls go through `frontend/src/lib/api.ts`; `VITE_API_URL` in `frontend/.env` must match the backend port.
-- Supabase is the DB/auth. Schema = `migration.sql`, then `migration_002_fixes.sql`, `migration_003_security.sql`, `migration_004_moderation.sql`, `migration_005_reports.sql`, `migration_006_cyoa_uploads.sql` (run in order in the Supabase SQL editor; all idempotent).
+- Supabase is the DB/auth. Schema = `migration.sql`, then `migration_002_fixes.sql`, `migration_003_security.sql`, `migration_004_moderation.sql`, `migration_005_reports.sql`, `migration_006_cyoa_uploads.sql`, `migration_007_mfa.sql` (run in order in the Supabase SQL editor; all idempotent).
 
 ## Verify
 - Backend: `cd backend && npx tsc --noEmit && npm run build` (outputs `dist/index.js`).
@@ -23,6 +23,7 @@
 - Dependencies: when updating, use `npm audit fix --before=<date 7+ days ago> --ignore-scripts` so no freshly published versions are pulled in.
 - Reports are created only via `POST /api/reports` (validation, per-account rate limit, duplicate/self-report checks); `migration_005` removes the direct client INSERT policy.
 - Client IPs: always use `req.ip`; set `TRUST_PROXY` (number of proxy hops) in `backend/.env` when deployed behind a proxy. Never read `X-Forwarded-For` / `CF-Connecting-IP` directly.
+- 2FA = Supabase Auth TOTP MFA (`TwoFactorSettings` on the profile page, global `MfaChallenge` prompt, `useAuth().mfaRequired`). A user with a verified factor at `aal1` is refused by `requireAuth` (`401 code: "mfa_required"`) and by restrictive RLS write policies (`migration_007`). The old custom `/api/auth/2fa/*` + `user_2fa_secrets` is gone/unused.
 - Sign-in/sign-up pass the hCaptcha token to Supabase (`options.captchaToken`); enforcement requires Bot Protection to be enabled in the Supabase dashboard.
 - Moderation actions: use `issueModerationAction` / `assertModeratable` in `backend/src/utils/moderation.ts` (records the action + sends a `notifications` row linking to `/notices`). Users see theirs via `GET /api/moderation/me` (site-wide `ModerationNotices` banner + `/notices` page) and acknowledge them; admins warn/timeout/withdraw via `ModerationActionDialog` / `ModerationHistoryDialog`.
 - Live tests: create throwaway users via `supabaseAdmin.auth.admin.createUser` and always delete them afterwards. Never write credentials to files. Bot Protection (captcha) is enabled, so password sign-in fails in scripts — get sessions with `supabaseAdmin.auth.admin.generateLink({ type: "magiclink", email })` + `auth.verifyOtp({ token_hash, type: "magiclink" })`, and use a throwaway admin instead of a real account.

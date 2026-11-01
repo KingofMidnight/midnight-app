@@ -21,6 +21,7 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import CreatorDashboard from "./pages/creator/CreatorDashboard";
 import NotFound from "./pages/NotFound";
 import Notices from "./pages/Notices";
+import MfaChallenge from "@/components/MfaChallenge";
 
 const queryClient = new QueryClient();
 
@@ -30,6 +31,7 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
+        <MfaChallenge />
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Layout><Index /></Layout>} />

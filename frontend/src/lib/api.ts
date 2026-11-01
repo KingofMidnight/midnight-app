@@ -31,12 +31,6 @@ export interface AdminModerationAction extends Omit<ModerationNotice, "active"> 
   revoked_by: string | null;
 }
 
-interface TwoFactorSetup {
-  secret: string;
-  manualEntryKey: string;
-  backupCodes: string[];
-}
-
 async function getJwt(): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error("Not authenticated.");
@@ -188,21 +182,6 @@ export const api = {
   creator: {
     become: () => apiPost("/api/auth/creator", {}),
     leave: () => apiDelete("/api/auth/creator"),
-  },
-
-  twoFactor: {
-    setup: () => apiPost<TwoFactorSetup & { otpauthUrl: string }>("/api/auth/2fa/setup"),
-
-    verifySetup: (token: string) => apiPost<{ valid: boolean }>("/api/auth/2fa/verify-setup", { token }),
-
-    enable: (token: string) => apiPost<{ enabled: boolean }>("/api/auth/2fa/enable", { token }),
-
-    verify: (token: string) => apiPost<{ verified: boolean }>("/api/auth/2fa/verify", { token }),
-
-    useBackupCode: (code: string) => apiPost<{ remainingCodes: number }>("/api/auth/2fa/backup-code", { code }),
-
-    disable: (proof: { token: string } | { code: string }) =>
-      apiPost<{ enabled: boolean }>("/api/auth/2fa/disable", proof),
   },
 
   sessions: {

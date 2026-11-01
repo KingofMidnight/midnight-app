@@ -13,6 +13,7 @@ import ContentCard from "@/components/ContentCard";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { SessionSecurity } from "@/components/SessionSecurity";
+import TwoFactorSettings from "@/components/TwoFactorSettings";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -445,6 +446,8 @@ const Profile = () => {
                   ))}
                 </div>
               </div>
+
+              <TwoFactorSettings />
 
               <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
                 <SessionSecurity />

@@ -14,6 +14,9 @@ interface AuthContextType {
   signIn: (email: string, password: string, captchaToken?: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  // True when the user has 2FA turned on but hasn't entered their code this session
+  mfaRequired: boolean;
+  refreshMfa: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,6 +29,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isCreator, setIsCreator] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
   const [banReason, setBanReason] = useState<string | null>(null);
+  const [mfaRequired, setMfaRequired] = useState(false);
+
+  const refreshMfa = async (): Promise<boolean> => {
+    const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    const required = !error && data.currentLevel === "aal1" && data.nextLevel === "aal2";
+    setMfaRequired(required);
+    return required;
+  };
 
   const checkRoles = async (userId: string) => {
     const { data, error } = await supabase
@@ -76,10 +87,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsCreator(false);
       setIsBanned(false);
       setBanReason(null);
+      setMfaRequired(false);
       return;
     }
 
     try {
+      await refreshMfa();
       const banStatus = await checkBan(session.user.id);
       if (banStatus.banned) {
         await supabase.auth.signOut();
@@ -153,7 +166,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, isAdmin, isCreator, isBanned, banReason, signUp, signIn, signOut, refreshUser }}>
+    <AuthContext.Provider value={{ user, session, loading, isAdmin, isCreator, isBanned, banReason, signUp, signIn, signOut, refreshUser, mfaRequired, refreshMfa }}>
       {children}
     </AuthContext.Provider>
   );

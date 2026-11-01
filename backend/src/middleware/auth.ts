@@ -34,6 +34,27 @@ const requireAnyRole = (allowed: AppRole[], message: string) =>
     next();
   };
 
+// Verifies the token with Supabase and reports whether a 2FA step is still
+// outstanding: the user has a verified authenticator but this session is only
+// at assurance level aal1 (signed in, code not entered yet).
+async function verifyToken(jwt: string): Promise<{ user: AuthUser; mfaPending: boolean } | null> {
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(jwt);
+  if (error || !user) return null;
+
+  const hasVerifiedFactor = (user.factors ?? []).some((f) => f.status === "verified");
+  let aal = "aal1";
+  try {
+    aal = JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString()).aal ?? "aal1";
+  } catch {
+    // Token already verified by Supabase above; an unreadable payload just means aal1
+  }
+
+  return {
+    user: { id: user.id, email: user.email ?? undefined },
+    mfaPending: hasVerifiedFactor && aal !== "aal2",
+  };
+}
+
 export const requireAuth = async (
   req: Request,
   res: Response,
@@ -47,22 +68,24 @@ export const requireAuth = async (
   }
 
   const jwt = authHeader.slice(7);
+  const verified = await verifyToken(jwt);
 
-  const {
-    data: { user },
-    error,
-  } = await supabaseAdmin.auth.getUser(jwt);
-
-  if (error || !user) {
+  if (!verified) {
     res.status(401).json({ success: false, error: "Invalid or expired token." });
     return;
   }
+  if (verified.mfaPending) {
+    res.status(401).json({ success: false, error: "Two-factor verification required.", code: "mfa_required" });
+    return;
+  }
 
-  req.user = { id: user.id, email: user.email ?? undefined } satisfies AuthUser;
+  req.user = verified.user;
   req.jwt = jwt;
   next();
 };
 
+// Signed-in users are recognised (e.g. to hide comments from blocked users);
+// a session that still owes its 2FA code is treated as signed out.
 export const optionalAuth = async (
   req: Request,
   _res: Response,
@@ -71,9 +94,9 @@ export const optionalAuth = async (
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith("Bearer ")) {
     const jwt = authHeader.slice(7);
-    const { data: { user } } = await supabaseAdmin.auth.getUser(jwt);
-    if (user) {
-      req.user = { id: user.id, email: user.email ?? undefined } satisfies AuthUser;
+    const verified = await verifyToken(jwt);
+    if (verified && !verified.mfaPending) {
+      req.user = verified.user;
       req.jwt = jwt;
     }
   }

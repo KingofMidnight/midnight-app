@@ -21,7 +21,7 @@ const AuthCreator = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { refreshUser } = useAuth();
+  const { refreshUser, refreshMfa } = useAuth();
   const t = siteContent.authCreator;
   const a = siteContent.auth;
 
@@ -85,6 +85,9 @@ const AuthCreator = () => {
       if (error) {
         toast({ title: "Sign in failed", description: error.message, variant: "destructive" });
         resetCaptcha();
+      } else if (await refreshMfa()) {
+        // 2FA user: the code prompt appears now; their creator role already exists
+        navigate("/creator");
       } else {
         try {
           await api.creator.become();

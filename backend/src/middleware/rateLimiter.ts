@@ -16,17 +16,6 @@ export const authLimiter = rateLimit({
   keyGenerator: (req: Request) => `auth:${req.ip || req.socket.remoteAddress || "unknown"}`,
 });
 
-// Brute-force guard for TOTP / backup-code checks. Must run AFTER requireAuth so
-// the limit follows the account, not the IP (TOTP codes are only 6 digits).
-export const twoFactorLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: "Too many 2FA attempts, try again later." },
-  keyGenerator: (req: Request) => `2fa:${req.user?.id ?? req.ip ?? "unknown"}`,
-});
-
 // Reports per account (falls back to IP); must run after requireAuth
 export const reportLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
