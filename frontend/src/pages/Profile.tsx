@@ -2,6 +2,7 @@
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { api } from "@/lib/api";
+import { checkImageFile, imageExtension } from "@/lib/uploads";
 import { Link, Navigate } from "react-router-dom";
 import { User, BookOpen, Star, CheckCircle, Bookmark, Settings, Eye, EyeOff, Camera, Shield, Archive, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -114,8 +115,12 @@ const Profile = () => {
 
   const handleAvatarUpload = async (file: File) => {
     if (!user) return;
-    const ext = file.name.split(".").pop();
-    const path = `${user.id}/avatar.${ext}`;
+    const problem = checkImageFile(file, "covers");
+    if (problem) {
+      toast({ title: "Can't upload this file", description: problem, variant: "destructive" });
+      return;
+    }
+    const path = `${user.id}/avatar.${imageExtension(file)}`;
     const { error: uploadErr } = await supabase.storage
       .from("covers")
       .upload(path, file, { upsert: true });

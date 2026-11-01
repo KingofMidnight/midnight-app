@@ -504,6 +504,7 @@ const CreatorDashboard = () => {
             <div className="sm:col-span-2">
               <ImageUpload
                 bucket="covers"
+                folder={user?.id}
                 label="Cover Image"
                 value={form.cover_image_url}
                 onChange={(url) => setForm({ ...form, cover_image_url: url })}
@@ -834,6 +835,7 @@ const CreatorDashboard = () => {
                 <div className="sm:col-span-2">
                   <ImageUpload
                     bucket="covers"
+                    folder={user?.id}
                     label="Cover Image"
                     value={form.cover_image_url}
                     onChange={(url) => setForm({ ...form, cover_image_url: url })}

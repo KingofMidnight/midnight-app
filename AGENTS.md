@@ -3,7 +3,7 @@
 ## Layout
 - `backend/` Express + TypeScript API. Entry: `backend/index.ts`. Port comes from `PORT` in `backend/.env` (currently 3000; code default 3001).
 - `frontend/` React + Vite (port 8080). All backend calls go through `frontend/src/lib/api.ts`; `VITE_API_URL` in `frontend/.env` must match the backend port.
-- Supabase is the DB/auth. Schema = `migration.sql`, then `migration_002_fixes.sql`, `migration_003_security.sql`, `migration_004_moderation.sql`, `migration_005_reports.sql` (run in order in the Supabase SQL editor; all idempotent).
+- Supabase is the DB/auth. Schema = `migration.sql`, then `migration_002_fixes.sql`, `migration_003_security.sql`, `migration_004_moderation.sql`, `migration_005_reports.sql`, `migration_006_cyoa_uploads.sql` (run in order in the Supabase SQL editor; all idempotent).
 
 ## Verify
 - Backend: `cd backend && npx tsc --noEmit && npm run build` (outputs `dist/index.js`).
@@ -18,6 +18,8 @@
 - Backend routes: wrap handlers in `asyncHandler`, validate with `parse(schema, …)` / `uuidParam`, respond with `sendData` → always `{ success, data }` / `{ success: false, error }` (see `backend/src/utils/http.ts`).
 - CYOA (choice-based stories): `stories.is_cyoa` + `chapter_choices`; UI in `ChapterChoices.tsx`, `StoryMap.tsx`, `ContentEditor.tsx` (ported from the `AI-main` branch).
 - Moderation is post-moderation: creators publish directly; reports drive review. DB triggers (`migration_004`) keep admin takedowns (`review_status = 'rejected'`) locked for creators and block writes from timed-out users (`user_moderation_actions`, type `timeout`; `warning` reserved for the upcoming warning/message system).
+- CYOA choices must stay within one story (DB trigger) and are only shown to readers when both chapters are published. Uploads: images only (`frontend/src/lib/uploads.ts` mirrors the bucket limits: covers 5 MB under `<user id>/`, manga pages 10 MB under `<story id>/`, owner/admin only).
+- Dependencies: when updating, use `npm audit fix --before=<date 7+ days ago> --ignore-scripts` so no freshly published versions are pulled in.
 - Reports are created only via `POST /api/reports` (validation, per-account rate limit, duplicate/self-report checks); `migration_005` removes the direct client INSERT policy.
 - Client IPs: always use `req.ip`; set `TRUST_PROXY` (number of proxy hops) in `backend/.env` when deployed behind a proxy. Never read `X-Forwarded-For` / `CF-Connecting-IP` directly.
 - Sign-in/sign-up pass the hCaptcha token to Supabase (`options.captchaToken`); enforcement requires Bot Protection to be enabled in the Supabase dashboard.

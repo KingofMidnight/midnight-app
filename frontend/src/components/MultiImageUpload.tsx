@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Upload, X, Loader2, GripVertical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { IMAGE_ACCEPT, checkImageFile, imageExtension } from "@/lib/uploads";
 
 interface MultiImageUploadProps {
   bucket: string;
@@ -22,8 +23,12 @@ const MultiImageUpload = ({ bucket, folder = "", value, onChange, label = "Pages
     const newUrls: string[] = [];
 
     for (const file of Array.from(files)) {
-      const ext = file.name.split(".").pop();
-      const path = `${folder ? folder + "/" : ""}${crypto.randomUUID()}.${ext}`;
+      const problem = checkImageFile(file, bucket);
+      if (problem) {
+        toast({ title: "Skipped a file", description: problem, variant: "destructive" });
+        continue;
+      }
+      const path = `${folder ? folder + "/" : ""}${crypto.randomUUID()}.${imageExtension(file)}`;
       const { error } = await supabase.storage.from(bucket).upload(path, file);
       if (error) {
         toast({ title: "Upload failed", description: error.message, variant: "destructive" });
@@ -57,7 +62,7 @@ const MultiImageUpload = ({ bucket, folder = "", value, onChange, label = "Pages
           <input
             ref={inputRef}
             type="file"
-            accept="image/*"
+            accept={IMAGE_ACCEPT}
             multiple
             className="hidden"
             onChange={(e) => {

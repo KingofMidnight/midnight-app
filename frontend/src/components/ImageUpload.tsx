@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Upload, X, Loader2, Image as ImageIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { IMAGE_ACCEPT, checkImageFile, imageExtension } from "@/lib/uploads";
 
 interface ImageUploadProps {
   bucket: string;
@@ -14,15 +15,19 @@ interface ImageUploadProps {
   accept?: string;
 }
 
-const ImageUpload = ({ bucket, folder = "", value, onChange, label = "Image", accept = "image/*" }: ImageUploadProps) => {
+const ImageUpload = ({ bucket, folder = "", value, onChange, label = "Image", accept = IMAGE_ACCEPT }: ImageUploadProps) => {
   const { toast } = useToast();
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const upload = async (file: File) => {
+    const problem = checkImageFile(file, bucket);
+    if (problem) {
+      toast({ title: "Can't upload this file", description: problem, variant: "destructive" });
+      return;
+    }
     setUploading(true);
-    const ext = file.name.split(".").pop();
-    const path = `${folder ? folder + "/" : ""}${crypto.randomUUID()}.${ext}`;
+    const path = `${folder ? folder + "/" : ""}${crypto.randomUUID()}.${imageExtension(file)}`;
 
     const { error } = await supabase.storage.from(bucket).upload(path, file);
     if (error) {
