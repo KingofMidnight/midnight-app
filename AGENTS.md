@@ -6,7 +6,8 @@
 - Supabase is the DB/auth. Schema = `migration.sql`, then `migration_002_fixes.sql`, `migration_003_security.sql`, `migration_004_moderation.sql`, `migration_005_reports.sql`, `migration_006_cyoa_uploads.sql`, `migration_007_mfa.sql` (run in order in the Supabase SQL editor; all idempotent).
 
 ## Verify
-- Backend: `cd backend && npx tsc --noEmit && npm run build` (outputs `dist/index.js`).
+- Backend: `cd backend && npx tsc --noEmit && npm run build && npm test` (unit tests, no network). `npm run test:live` runs `tests/live` against the Supabase project in `backend/.env` with throwaway users (all migrations must be applied). The Express app lives in `src/app.ts`; `index.ts` only listens.
+- CI: `.github/workflows/ci.yml` runs type checks, builds, unit tests and a service-role-key leak check on every push/PR.
 - Frontend: `cd frontend && npx tsc --noEmit -p tsconfig.app.json && npx vite build` (delete `frontend/dist` afterwards), `npm test` (vitest).
 - Run backend locally: `cd backend && npm run dev` (or `node dist/index.js`).
 

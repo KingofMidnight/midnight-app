@@ -29,11 +29,22 @@ const SIGNATURES: Record<string, (b: Uint8Array) => boolean> = {
     String.fromCharCode(...b.slice(0, 4)) === "RIFF" && String.fromCharCode(...b.slice(8, 12)) === "WEBP",
 };
 
+// Blob.arrayBuffer() is missing in some older browsers (and jsdom), so fall back to FileReader
+function readHead(file: Blob, bytes: number): Promise<Uint8Array> {
+  const part = file.slice(0, bytes);
+  if (typeof part.arrayBuffer === "function") return part.arrayBuffer().then((b) => new Uint8Array(b));
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsArrayBuffer(part);
+  });
+}
+
 export async function hasValidImageSignature(file: File): Promise<boolean> {
   const check = SIGNATURES[file.type];
   if (!check) return false;
-  const head = new Uint8Array(await file.slice(0, 12).arrayBuffer());
-  return check(head);
+  return check(await readHead(file, 12));
 }
 
 // Full check: type, size and content. Returns an error message or null.

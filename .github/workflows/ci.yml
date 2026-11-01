@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main, agent-fixes]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      # Install scripts stay disabled (same as local dev); nothing here needs Chrome
+      - run: npm ci --ignore-scripts
+      - run: npx tsc --noEmit
+      - run: npm run build
+      - run: npm test
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npx tsc --noEmit -p tsconfig.app.json
+      - run: npm test
+      - run: npx vite build
+      # The service-role key bypasses all database security; it must never ship to browsers
+      - name: Check the build contains no service-role key
+        run: |
+          if grep -rEl "service_role|SUPABASE_SERVICE_ROLE_KEY" dist; then
+            echo "::error::A service-role key reference was found in the frontend build"
+            exit 1
+          fi
