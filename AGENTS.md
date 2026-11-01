@@ -1,9 +1,9 @@
 # Midnight — agent notes
 
 ## Layout
-- `backend/` Express + TypeScript API (port 3001). Entry: `backend/index.ts`.
-- `frontend/` React + Vite (port 8080). All backend calls go through `frontend/src/lib/api.ts` (`VITE_API_URL`).
-- Supabase is the DB/auth. Schema = `migration.sql`, then `migration_002_fixes.sql`, then `migration_003_security.sql` (run in order in the Supabase SQL editor).
+- `backend/` Express + TypeScript API. Entry: `backend/index.ts`. Port comes from `PORT` in `backend/.env` (currently 3000; code default 3001).
+- `frontend/` React + Vite (port 8080). All backend calls go through `frontend/src/lib/api.ts`; `VITE_API_URL` in `frontend/.env` must match the backend port.
+- Supabase is the DB/auth. Schema = `migration.sql`, then `migration_002_fixes.sql`, `migration_003_security.sql`, `migration_004_moderation.sql` (run in order in the Supabase SQL editor; all idempotent).
 
 ## Verify
 - Backend: `cd backend && npx tsc --noEmit && npm run build` (outputs `dist/index.js`).
@@ -17,4 +17,5 @@
 - Server-side fetches of user-supplied URLs must use `backend/src/utils/safeFetch.ts` (SSRF protection).
 - Backend routes: wrap handlers in `asyncHandler`, validate with `parse(schema, …)` / `uuidParam`, respond with `sendData` → always `{ success, data }` / `{ success: false, error }` (see `backend/src/utils/http.ts`).
 - CYOA (choice-based stories): `stories.is_cyoa` + `chapter_choices`; UI in `ChapterChoices.tsx`, `StoryMap.tsx`, `ContentEditor.tsx` (ported from the `AI-main` branch).
+- Moderation is post-moderation: creators publish directly; reports drive review. DB triggers (`migration_004`) keep admin takedowns (`review_status = 'rejected'`) locked for creators and block writes from timed-out users (`user_moderation_actions`, type `timeout`; `warning` reserved for the upcoming warning/message system).
 - Live tests: create throwaway users via `supabaseAdmin.auth.admin.createUser` and always delete them afterwards. Never write credentials to files.
