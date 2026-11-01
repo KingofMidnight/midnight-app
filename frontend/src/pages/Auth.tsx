@@ -16,6 +16,7 @@ const Auth = () => {
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string>("");
+  const [captchaReset, setCaptchaReset] = useState(0);
   const { signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -35,20 +36,17 @@ const Auth = () => {
 
     setLoading(true);
 
-    if (mode === "signup") {
-      const { error } = await signUp(email, password, username);
-      if (error) {
-        toast({ title: "Sign up failed", description: error.message, variant: "destructive" });
-      } else {
-        navigate("/");
-      }
+    const { error } = mode === "signup"
+      ? await signUp(email, password, username, captchaToken)
+      : await signIn(email, password, captchaToken);
+
+    if (error) {
+      toast({ title: mode === "signup" ? "Sign up failed" : "Sign in failed", description: error.message, variant: "destructive" });
+      // Captcha tokens are single-use: make the user solve a fresh one
+      setCaptchaToken("");
+      setCaptchaReset((n) => n + 1);
     } else {
-      const { error } = await signIn(email, password);
-      if (error) {
-        toast({ title: "Sign in failed", description: error.message, variant: "destructive" });
-      } else {
-        navigate("/");
-      }
+      navigate("/");
     }
 
     setLoading(false);
@@ -108,6 +106,7 @@ const Auth = () => {
             <HCaptcha
               onVerify={setCaptchaToken}
               onError={() => setCaptchaToken("")}
+              resetKey={captchaReset}
               theme="dark"
             />
           </div>

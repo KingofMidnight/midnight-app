@@ -64,6 +64,16 @@ export const signUpLimiter = rateLimit({
   },
 });
 
+// Reports per account (falls back to IP); must run after requireAuth
+export const reportLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: "Too many reports, please try again later." },
+  keyGenerator: (req: Request) => `report:${req.user?.id ?? req.ip ?? "unknown"}`,
+});
+
 export const commentLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
   max: 10,

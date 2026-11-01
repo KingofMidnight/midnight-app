@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { UserBlockButton } from "./UserBlockButton";
 import RichTextComment from "@/components/RichTextComment";
+import ReportDialog from "@/components/ReportDialog";
 import { MessageCircle, Reply, Trash2, User, Clock } from "lucide-react";
 import { Link } from "react-router-dom";
 import { sanitizeComment } from "@/utils/sanitize";
@@ -120,6 +121,9 @@ export const ThreadedComments = ({
               </Button>
               {comment.userName !== "Anonymous" && (
                 <UserBlockButton userId={comment.userId} userName={comment.userName} />
+              )}
+              {currentUserId && currentUserId !== comment.userId && (
+                <ReportDialog commentId={comment.id} reportedUserId={comment.userId} />
               )}
               {onDeleteComment && currentUserId === comment.userId && (
                 <Button

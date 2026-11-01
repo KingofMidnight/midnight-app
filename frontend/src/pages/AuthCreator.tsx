@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Mail, Lock, User, ArrowLeft, Pen } from "lucide-react";
 import { siteContent } from "@/lib/content";
+import { HCaptcha } from "@/components/HCaptcha";
 
 const AuthCreator = () => {
   const [mode, setMode] = useState<"signin" | "signup">("signup");
@@ -24,8 +25,20 @@ const AuthCreator = () => {
   const t = siteContent.authCreator;
   const a = siteContent.auth;
 
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
+
+  const resetCaptcha = () => {
+    setCaptchaToken("");
+    setCaptchaReset((n) => n + 1);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!captchaToken) {
+      toast({ title: "Verification required", description: "Please complete the captcha verification.", variant: "destructive" });
+      return;
+    }
     setLoading(true);
 
     if (mode === "signup") {
@@ -34,17 +47,20 @@ const AuthCreator = () => {
         password,
         options: {
           data: { username, display_name: displayName || username },
+          captchaToken,
         },
       });
 
       if (error) {
         toast({ title: "Sign up failed", description: error.message, variant: "destructive" });
+        resetCaptcha();
         setLoading(false);
         return;
       }
 
       if (!data.session) {
         toast({ title: a.checkEmail, description: `${a.checkEmailDesc} Then sign in here to activate your creator account.` });
+        resetCaptcha();
         setMode("signin");
         setLoading(false);
         return;
@@ -65,9 +81,10 @@ const AuthCreator = () => {
       await refreshUser();
       navigate("/creator");
     } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { error } = await supabase.auth.signInWithPassword({ email, password, options: { captchaToken } });
       if (error) {
         toast({ title: "Sign in failed", description: error.message, variant: "destructive" });
+        resetCaptcha();
       } else {
         try {
           await api.creator.become();
@@ -154,6 +171,9 @@ const AuthCreator = () => {
               required
               minLength={6}
             />
+          </div>
+          <div className="flex justify-center">
+            <HCaptcha onVerify={setCaptchaToken} onError={() => setCaptchaToken("")} resetKey={captchaReset} theme="dark" />
           </div>
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? siteContent.loading : mode === "signin" ? a.signIn : t.createButton}

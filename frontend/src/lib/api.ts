@@ -130,6 +130,22 @@ export const api = {
     removeTimeout: (userId: string) => apiDelete(`/api/admin/users/${userId}/timeout`),
   },
 
+  reports: {
+    create: (body: {
+      reportType: "content" | "user" | "dmca";
+      storyId?: string | null;
+      chapterId?: string | null;
+      episodeId?: string | null;
+      commentId?: string | null;
+      reportedUserId?: string | null;
+      reason: string;
+      details?: string | null;
+      dmcaClaimantName?: string | null;
+      dmcaClaimantEmail?: string | null;
+      dmcaOriginalWorkUrl?: string | null;
+    }) => apiPost<{ id: string; status: string }>("/api/reports", body),
+  },
+
   reviews: {
     markHelpful: (reviewId: string) => apiPost(`/api/reviews/${reviewId}/helpful`),
   },

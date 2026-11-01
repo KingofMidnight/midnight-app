@@ -1,6 +1,5 @@
 ﻿import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import type { TablesInsert } from "@/integrations/supabase/types";
+import { api } from "@/lib/api";
 import type { ReportType } from "@/types/domain";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -54,25 +53,20 @@ const ReportDialog = ({
     if (!reason.trim()) return;
     setLoading(true);
 
-    const payload: TablesInsert<"reports"> = {
-      reporter_id: user.id,
-      report_type: type,
-      story_id: storyId || null,
-      chapter_id: chapterId || null,
-      episode_id: episodeId || null,
-      comment_id: commentId || null,
-      reported_user_id: reportedUserId || null,
-      reason,
-      details: details || null,
-      dmca_claimant_name: type === "dmca" ? dmcaName || null : null,
-      dmca_claimant_email: type === "dmca" ? dmcaEmail || null : null,
-      dmca_original_work_url: type === "dmca" ? dmcaUrl || null : null,
-    };
-
-    const { error } = await supabase.from("reports").insert(payload);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
+    try {
+      await api.reports.create({
+        reportType: type,
+        storyId: storyId || null,
+        chapterId: chapterId || null,
+        episodeId: episodeId || null,
+        commentId: commentId || null,
+        reportedUserId: reportedUserId || null,
+        reason: reason.trim(),
+        details: details.trim() || null,
+        dmcaClaimantName: type === "dmca" ? dmcaName.trim() || null : null,
+        dmcaClaimantEmail: type === "dmca" ? dmcaEmail.trim() || null : null,
+        dmcaOriginalWorkUrl: type === "dmca" ? dmcaUrl.trim() || null : null,
+      });
       toast({ title: "Report submitted", description: "Our team will review this shortly." });
       setOpen(false);
       setReason("");
@@ -80,8 +74,11 @@ const ReportDialog = ({
       setDmcaName("");
       setDmcaEmail("");
       setDmcaUrl("");
+    } catch (err) {
+      toast({ title: "Report not sent", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -132,9 +129,9 @@ const ReportDialog = ({
           {type === "dmca" && (
             <div className="space-y-3 p-3 bg-destructive/10 rounded-lg">
               <p className="text-xs text-destructive font-medium">DMCA Takedown Request</p>
-              <Input placeholder="Claimant full name" value={dmcaName} onChange={(e) => setDmcaName(e.target.value)} className="bg-background border-border" />
-              <Input placeholder="Claimant email" type="email" value={dmcaEmail} onChange={(e) => setDmcaEmail(e.target.value)} className="bg-background border-border" />
-              <Input placeholder="URL to original work" value={dmcaUrl} onChange={(e) => setDmcaUrl(e.target.value)} className="bg-background border-border" />
+              <Input placeholder="Claimant full name (required)" value={dmcaName} onChange={(e) => setDmcaName(e.target.value)} className="bg-background border-border" />
+              <Input placeholder="Claimant email (required)" type="email" value={dmcaEmail} onChange={(e) => setDmcaEmail(e.target.value)} className="bg-background border-border" />
+              <Input placeholder="URL to original work (required)" value={dmcaUrl} onChange={(e) => setDmcaUrl(e.target.value)} className="bg-background border-border" />
             </div>
           )}
 

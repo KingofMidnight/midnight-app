@@ -15,11 +15,19 @@ import reviewsRouter from "./src/routes/reviews.js";
 import storiesRouter from "./src/routes/stories.js";
 import commentsRouter from "./src/routes/comments.js";
 import filesRouter from "./src/routes/files.js";
+import reportsRouter from "./src/routes/reports.js";
 import { errorHandler, notFound } from "./src/middleware/errorHandler.js";
 import { securityHeaders } from "./src/middleware/securityHeaders.js";
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
+
+// How many reverse proxies (Cloudflare, nginx, Render, …) sit in front of the API.
+// Express then derives req.ip from X-Forwarded-For only for those trusted hops, so
+// rate limits and view de-duplication see the real visitor IP and clients can't
+// spoof it. Leave unset (0) when the API is reached directly, e.g. in local dev.
+const trustProxy = process.env.TRUST_PROXY ?? "0";
+app.set("trust proxy", /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy);
 
 app.use(helmet());
 app.use(securityHeaders);
@@ -67,6 +75,7 @@ app.use("/api/export", exportRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/views", viewsRouter);
 app.use("/api/files", filesRouter);
+app.use("/api/reports", reportsRouter);
 
 app.use(notFound);
 app.use(errorHandler);

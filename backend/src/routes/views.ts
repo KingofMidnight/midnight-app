@@ -5,18 +5,10 @@ import { asyncHandler, uuidParam, sendData } from "../utils/http";
 
 const router = Router();
 
+// req.ip honours the "trust proxy" setting (TRUST_PROXY in .env), so forwarding
+// headers are only used when they come from our own proxy and can't be spoofed.
 function getClientIp(req: Request): string {
-  const cfIp = req.headers['cf-connecting-ip'];
-  if (cfIp && typeof cfIp === 'string') {
-    return cfIp;
-  }
-  
-  const forwarded = req.headers["x-forwarded-for"];
-  if (forwarded) {
-    return (Array.isArray(forwarded) ? forwarded[0] : forwarded).split(",")[0].trim();
-  }
-  
-  return req.socket.remoteAddress ?? "unknown";
+  return req.ip || req.socket.remoteAddress || "unknown";
 }
 
 async function getViewCount(storyId: string): Promise<number> {
