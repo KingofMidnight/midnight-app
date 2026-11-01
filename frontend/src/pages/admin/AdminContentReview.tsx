@@ -63,7 +63,7 @@ const AdminContentReview = () => {
       }
 
       if (storiesData && storiesData.length > 0) {
-        const creatorIds = storiesData.map(s => s.created_by).filter(Boolean);
+        const creatorIds = storiesData.map(s => s.created_by).filter((v): v is string => !!v);
         if (creatorIds.length > 0) {
           const { data: profilesData, error: profilesError } = await supabase
             .from("profiles")

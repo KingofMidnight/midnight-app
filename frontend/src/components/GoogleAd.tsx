@@ -1,7 +1,7 @@
 ﻿import { useEffect, useRef, useState } from "react";
 
 interface GoogleAdProps {
-  slot: string;
+  slot?: string;
   format?: "auto" | "rectangle" | "vertical" | "horizontal";
   className?: string;
   style?: React.CSSProperties;

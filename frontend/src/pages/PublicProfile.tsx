@@ -199,7 +199,7 @@ const PublicProfile = () => {
                     {isFollowing ? "Following" : "Follow"}
                   </Button>
                 )}
-                <UserBlockButton userId={id} userName={profile.display_name || profile.username || "User"} />
+                {id && <UserBlockButton userId={id} userName={profile.display_name || profile.username || "User"} />}
                 <ReportDialog reportedUserId={id} variant="outline" />
               </div>
             )}
