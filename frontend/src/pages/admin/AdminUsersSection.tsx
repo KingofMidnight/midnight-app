@@ -18,9 +18,11 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { User, Search, MoreHorizontal, Trash2, Ban, UserX, Loader2 } from "lucide-react";
+import { User, Search, MoreHorizontal, Trash2, Ban, UserX, Loader2, AlertTriangle, Clock, History } from "lucide-react";
 import PaginationControls from "@/components/PaginationControls";
 import { api as backendApi } from "@/lib/api";
+import { ModerationActionDialog, type ModerationTarget } from "@/components/admin/ModerationActionDialog";
+import { ModerationHistoryDialog } from "@/components/admin/ModerationHistoryDialog";
 import type { AppRole, UserWithRoles } from "@/types/domain";
 
 const USERS_PAGE_SIZE = 20;
@@ -43,6 +45,41 @@ const AdminUsersSection = () => {
   const [banTarget, setBanTarget] = useState<UserWithRoles | null>(null);
   const [banReason, setBanReason] = useState("");
   const [banning, setBanning] = useState(false);
+
+  const [standing, setStanding] = useState<Record<string, { warnings: number; timedOutUntil: string | null }>>({});
+  const [modTarget, setModTarget] = useState<ModerationTarget | null>(null);
+  const [historyUser, setHistoryUser] = useState<{ id: string; username: string | null } | null>(null);
+
+  // Warning counts + active timeouts for every user (admins can read all moderation actions)
+  const loadStanding = useCallback(async () => {
+    const { data } = await supabase
+      .from("user_moderation_actions")
+      .select("user_id, action_type, expires_at, revoked_at")
+      .is("revoked_at", null);
+    const now = Date.now();
+    const map: Record<string, { warnings: number; timedOutUntil: string | null }> = {};
+    (data ?? []).forEach((a) => {
+      const s = (map[a.user_id] ??= { warnings: 0, timedOutUntil: null });
+      if (a.action_type === "warning") s.warnings++;
+      else if (a.expires_at && new Date(a.expires_at).getTime() > now && (!s.timedOutUntil || a.expires_at > s.timedOutUntil)) {
+        s.timedOutUntil = a.expires_at;
+      }
+    });
+    setStanding(map);
+  }, []);
+
+  useEffect(() => { loadStanding(); }, [loadStanding]);
+
+  const removeTimeout = async (u: UserWithRoles) => {
+    if (!confirm(`Remove the timeout for @${u.username ?? "this user"}?`)) return;
+    try {
+      await backendApi.admin.removeTimeout(u.id);
+      toast({ title: "Timeout removed" });
+      loadStanding();
+    } catch (err) {
+      toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
+    }
+  };
 
   const load = useCallback(async () => {
     const { data: profiles } = await supabase
@@ -150,7 +187,9 @@ const AdminUsersSection = () => {
 
   return (
     <>
-      {}
+      <ModerationActionDialog target={modTarget} onClose={() => setModTarget(null)} onDone={loadStanding} />
+      <ModerationHistoryDialog user={historyUser} onClose={() => setHistoryUser(null)} onChanged={loadStanding} />
+
       <Dialog open={banModalOpen} onOpenChange={(open) => { if (!open) setBanModalOpen(false); }}>
         <DialogContent>
           <DialogHeader>
@@ -165,7 +204,7 @@ const AdminUsersSection = () => {
                 </Avatar>
                 <div>
                   <p className="font-medium text-sm">
-                    {banTarget.display_name ?? banTarget.username ?? "â€”"}
+                    {banTarget.display_name ?? banTarget.username ?? "—"}
                   </p>
                   {banTarget.username && (
                     <p className="text-xs text-muted-foreground">@{banTarget.username}</p>
@@ -238,6 +277,7 @@ const AdminUsersSection = () => {
                 <TableHead>User</TableHead>
                 <TableHead>Username</TableHead>
                 <TableHead>Roles</TableHead>
+                <TableHead>Standing</TableHead>
                 <TableHead>Joined</TableHead>
                 <TableHead>Add Role</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -246,7 +286,7 @@ const AdminUsersSection = () => {
             <TableBody>
               {paged.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-12">
                     No users found.
                   </TableCell>
                 </TableRow>
@@ -280,6 +320,21 @@ const AdminUsersSection = () => {
                       ))}
                     </div>
                   </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1 flex-wrap">
+                      {standing[u.id]?.timedOutUntil && (
+                        <Badge variant="destructive" className="text-xs gap-1" title={`Until ${new Date(standing[u.id].timedOutUntil!).toLocaleString()}`}>
+                          <Clock className="h-3 w-3" /> Timed out
+                        </Badge>
+                      )}
+                      {(standing[u.id]?.warnings ?? 0) > 0 && (
+                        <Badge variant="secondary" className="text-xs gap-1">
+                          <AlertTriangle className="h-3 w-3" /> {standing[u.id].warnings} warning{standing[u.id].warnings === 1 ? "" : "s"}
+                        </Badge>
+                      )}
+                      {!standing[u.id] && <span className="text-xs text-muted-foreground">Good</span>}
+                    </div>
+                  </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {new Date(u.created_at).toLocaleDateString()}
                   </TableCell>
@@ -305,6 +360,28 @@ const AdminUsersSection = () => {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => setModTarget({ userId: u.id, username: u.username, kind: "warning" })}
+                          className="gap-2"
+                        >
+                          <AlertTriangle className="h-4 w-4" /> Warn User
+                        </DropdownMenuItem>
+                        {standing[u.id]?.timedOutUntil ? (
+                          <DropdownMenuItem onClick={() => removeTimeout(u)} className="gap-2">
+                            <Clock className="h-4 w-4" /> Remove Timeout
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem
+                            onClick={() => setModTarget({ userId: u.id, username: u.username, kind: "timeout" })}
+                            className="gap-2"
+                          >
+                            <Clock className="h-4 w-4" /> Timeout User
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onClick={() => setHistoryUser({ id: u.id, username: u.username })} className="gap-2">
+                          <History className="h-4 w-4" /> Moderation History
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onClick={() => openBanModal(u)}
                           className="gap-2 text-destructive focus:text-destructive"

@@ -4,6 +4,7 @@ import { requireAuth, requireAdmin, getUserRoles } from "../middleware/auth";
 import { supabaseAdmin } from "../config/supabase";
 import { createError } from "../middleware/errorHandler";
 import { asyncHandler, parse, uuidParam, sendData } from "../utils/http";
+import { assertModeratable, issueModerationAction } from "../utils/moderation";
 
 const router = Router();
 
@@ -48,6 +49,12 @@ const TimeoutSchema = z.object({
   duration: z.enum(Object.keys(TIMEOUT_PRESETS) as [keyof typeof TIMEOUT_PRESETS, ...(keyof typeof TIMEOUT_PRESETS)[]], {
     errorMap: () => ({ message: `duration must be one of: ${Object.keys(TIMEOUT_PRESETS).join(", ")}.` }),
   }),
+  reason: z.string().trim().min(1, "reason is required.").max(500),
+  message: z.string().trim().max(2000).optional(),
+  reportId: z.string().uuid().optional(),
+});
+
+const WarnSchema = z.object({
   reason: z.string().trim().min(1, "reason is required.").max(500),
   message: z.string().trim().max(2000).optional(),
   reportId: z.string().uuid().optional(),
@@ -166,33 +173,31 @@ router.post(
   asyncHandler(async (req, res) => {
     const userId = uuidParam(req, "userId");
     const { duration, reason, message, reportId } = parse(TimeoutSchema, req.body);
+    await assertModeratable(userId, req.user!.id, "time out");
 
-    if (userId === req.user!.id) throw createError("You cannot time yourself out.", 400);
-    const roles = await getUserRoles(userId);
-    if (roles.includes("admin") || roles.includes("moderator")) {
-      throw createError("Admins and moderators cannot be timed out.", 403);
-    }
+    const data = await issueModerationAction({
+      userId,
+      issuedBy: req.user!.id,
+      type: "timeout",
+      reason,
+      message,
+      reportId,
+      expiresAt: new Date(Date.now() + TIMEOUT_PRESETS[duration] * 3_600_000).toISOString(),
+    });
+    sendData(res, data, 201);
+  })
+);
 
-    const { data: target, error: userErr } = await supabaseAdmin.auth.admin.getUserById(userId);
-    if (userErr || !target?.user) throw createError("User not found.", 404);
+// Warning: recorded on the user's moderation history and sent to them as a
+// notice they must acknowledge. No restriction is applied.
+router.post(
+  "/users/:userId/warn",
+  asyncHandler(async (req, res) => {
+    const userId = uuidParam(req, "userId");
+    const { reason, message, reportId } = parse(WarnSchema, req.body);
+    await assertModeratable(userId, req.user!.id, "warn");
 
-    const expiresAt = new Date(Date.now() + TIMEOUT_PRESETS[duration] * 3_600_000).toISOString();
-
-    const { data, error } = await supabaseAdmin
-      .from("user_moderation_actions")
-      .insert({
-        user_id: userId,
-        action_type: "timeout",
-        reason,
-        message: message ?? null,
-        report_id: reportId ?? null,
-        issued_by: req.user!.id,
-        expires_at: expiresAt,
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
+    const data = await issueModerationAction({ userId, issuedBy: req.user!.id, type: "warning", reason, message, reportId });
     sendData(res, data, 201);
   })
 );
@@ -216,7 +221,27 @@ router.delete(
   })
 );
 
-// Full moderation history for a user (timeouts now; warnings later)
+// Withdraw a warning or timeout issued by mistake (kept in history, marked revoked)
+router.post(
+  "/moderation-actions/:actionId/revoke",
+  asyncHandler(async (req, res) => {
+    const actionId = uuidParam(req, "actionId");
+
+    const { data, error } = await supabaseAdmin
+      .from("user_moderation_actions")
+      .update({ revoked_at: new Date().toISOString(), revoked_by: req.user!.id })
+      .eq("id", actionId)
+      .is("revoked_at", null)
+      .select("id")
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) throw createError("Action not found or already revoked.", 404);
+    sendData(res, { revoked: actionId });
+  })
+);
+
+// Full moderation history for a user (warnings + timeouts)
 router.get(
   "/users/:userId/moderation",
   asyncHandler(async (req, res) => {
@@ -234,7 +259,11 @@ router.get(
     const activeTimeout = (data ?? []).find(
       (a) => a.action_type === "timeout" && !a.revoked_at && a.expires_at && new Date(a.expires_at).getTime() > now
     );
-    sendData(res, { actions: data ?? [], timedOutUntil: activeTimeout?.expires_at ?? null });
+    sendData(res, {
+      actions: data ?? [],
+      timedOutUntil: activeTimeout?.expires_at ?? null,
+      warningCount: (data ?? []).filter((a) => a.action_type === "warning" && !a.revoked_at).length,
+    });
   })
 );
 

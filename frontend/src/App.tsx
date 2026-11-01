@@ -20,6 +20,7 @@ import TermsOfService from "./pages/TermsOfService";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import CreatorDashboard from "./pages/creator/CreatorDashboard";
 import NotFound from "./pages/NotFound";
+import Notices from "./pages/Notices";
 
 const queryClient = new QueryClient();
 
@@ -43,6 +44,7 @@ const App = () => (
             <Route path="/profile/:id" element={<Layout><PublicProfile /></Layout>} />
             <Route path="/terms" element={<Layout><TermsOfService /></Layout>} />
             <Route path="/privacy" element={<Layout><PrivacyPolicy /></Layout>} />
+            <Route path="/notices" element={<Layout><Notices /></Layout>} />
             <Route path="/admin" element={<Layout><AdminDashboard /></Layout>} />
             <Route path="/creator" element={<Layout><CreatorDashboard /></Layout>} />
             <Route path="*" element={<NotFound />} />

@@ -12,6 +12,25 @@ type ApiResponse<T = unknown> = { success: boolean; data?: T; error?: string } &
 
 export type TimeoutDuration = "1h" | "24h" | "3d" | "7d" | "30d";
 
+export interface ModerationNotice {
+  id: string;
+  action_type: "warning" | "timeout";
+  reason: string;
+  message: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  acknowledged_at: string | null;
+  created_at: string;
+  active: boolean;
+}
+
+export interface AdminModerationAction extends Omit<ModerationNotice, "active"> {
+  user_id: string;
+  issued_by: string | null;
+  report_id: string | null;
+  revoked_by: string | null;
+}
+
 interface TwoFactorSetup {
   secret: string;
   manualEntryKey: string;
@@ -128,6 +147,22 @@ export const api = {
     ) => apiPost<{ id: string; expires_at: string }>(`/api/admin/users/${userId}/timeout`, body),
 
     removeTimeout: (userId: string) => apiDelete(`/api/admin/users/${userId}/timeout`),
+
+    warnUser: (userId: string, body: { reason: string; message?: string; reportId?: string }) =>
+      apiPost<{ id: string }>(`/api/admin/users/${userId}/warn`, body),
+
+    revokeModerationAction: (actionId: string) => apiPost(`/api/admin/moderation-actions/${actionId}/revoke`),
+
+    getModeration: (userId: string) =>
+      apiGet<{ actions: AdminModerationAction[]; timedOutUntil: string | null; warningCount: number }>(
+        `/api/admin/users/${userId}/moderation`
+      ),
+  },
+
+  moderation: {
+    me: () =>
+      apiGet<{ actions: ModerationNotice[]; timedOutUntil: string | null; unacknowledged: number }>("/api/moderation/me"),
+    acknowledge: (actionId: string) => apiPost(`/api/moderation/${actionId}/acknowledge`),
   },
 
   reports: {

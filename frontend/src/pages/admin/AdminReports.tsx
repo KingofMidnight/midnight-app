@@ -6,14 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import {
   AlertTriangle, Shield, Flag, MessageSquare, CheckCircle, X, BookOpen, Image, Tv, User,
   ExternalLink, EyeOff, Eye, Trash2, Clock,
 } from "lucide-react";
-import { api as backendApi, type TimeoutDuration } from "@/lib/api";
+import { api as backendApi } from "@/lib/api";
+import { ModerationActionDialog, type ModerationTarget } from "@/components/admin/ModerationActionDialog";
 import type { ReportStatus, ReportType, StoryType } from "@/types/domain";
 
 interface ReportRow {
@@ -76,102 +74,6 @@ function stripHtml(html: string, maxLen = 80): string {
 
 const readerPath = (type: StoryType | undefined, storyId: string, chapterId: string) =>
   `/read/${type === "manga" || type === "comic" ? "manga" : "novel"}/${storyId}/${chapterId}`;
-
-const TIMEOUT_OPTIONS: { value: TimeoutDuration; label: string }[] = [
-  { value: "1h",  label: "1 hour" },
-  { value: "24h", label: "24 hours" },
-  { value: "3d",  label: "3 days" },
-  { value: "7d",  label: "7 days" },
-  { value: "30d", label: "30 days" },
-];
-
-interface TimeoutTarget {
-  userId: string;
-  username: string | null;
-  role: "reported user" | "reporter";
-}
-
-// Timeout = the user can still sign in and read, but can't post or edit anything
-// until it expires. `message` is stored for the upcoming user message system.
-const TimeoutDialog = ({
-  target, reportId, defaultReason, onClose, onDone,
-}: {
-  target: TimeoutTarget | null;
-  reportId: string;
-  defaultReason: string;
-  onClose: () => void;
-  onDone: () => void;
-}) => {
-  const { toast } = useToast();
-  const [duration, setDuration] = useState<TimeoutDuration>("24h");
-  const [reason, setReason] = useState("");
-  const [message, setMessage] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!target) return;
-    setDuration("24h");
-    setReason(target.role === "reporter" ? "Abusive or false report" : defaultReason);
-    setMessage("");
-  }, [target, defaultReason]);
-
-  const submit = async () => {
-    if (!target || !reason.trim()) return;
-    setSaving(true);
-    try {
-      await backendApi.admin.timeoutUser(target.userId, {
-        duration,
-        reason: reason.trim(),
-        message: message.trim() || undefined,
-        reportId,
-      });
-      toast({ title: `@${target.username ?? "user"} timed out for ${TIMEOUT_OPTIONS.find((o) => o.value === duration)?.label}` });
-      onDone();
-      onClose();
-    } catch (err) {
-      toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Dialog open={!!target} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Timeout {target?.role} @{target?.username ?? "user"}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            They can still sign in and read, but can't comment, review, rate, report, or publish/edit content until the timeout ends.
-          </p>
-          <Select value={duration} onValueChange={(v) => setDuration(v as TimeoutDuration)}>
-            <SelectTrigger className="bg-background border-border"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {TIMEOUT_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Input
-            placeholder="Reason (required, internal)"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            className="bg-background border-border"
-          />
-          <Textarea
-            placeholder="Message to the user (optional — shown once the message system is added)"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            className="bg-background border-border"
-            rows={3}
-          />
-          <Button onClick={submit} disabled={saving || !reason.trim()} className="w-full gap-1.5">
-            <Clock className="h-4 w-4" /> {saving ? "Applying..." : "Apply timeout"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-};
 
 const formatUntil = (iso: string) => new Date(iso).toLocaleString();
 
@@ -242,7 +144,7 @@ const ReportCard = ({ report: r, onUpdate, onReload }: ReportCardProps) => {
     run(() => setContentStatus("approved"), "Content restored");
   };
 
-  const [timeoutTarget, setTimeoutTarget] = useState<TimeoutTarget | null>(null);
+  const [modTarget, setModTarget] = useState<ModerationTarget | null>(null);
 
   const removeTimeout = (userId: string, username: string | null) => {
     if (!confirm(`Remove the timeout for @${username ?? "this user"}?`)) return;
@@ -251,16 +153,28 @@ const ReportCard = ({ report: r, onUpdate, onReload }: ReportCardProps) => {
 
   const takenDown = t?.reviewStatus === "rejected";
 
-  const timeoutControls = (userId: string, username: string | null, role: TimeoutTarget["role"], until: string | null) =>
-    until ? (
-      <Button size="sm" variant="outline" onClick={() => removeTimeout(userId, username)} disabled={saving} className="gap-1">
-        <Clock className="h-3 w-3" /> Remove {role} timeout (until {formatUntil(until)})
-      </Button>
-    ) : (
-      <Button size="sm" variant="outline" onClick={() => setTimeoutTarget({ userId, username, role })} disabled={saving} className="gap-1 text-destructive">
-        <Clock className="h-3 w-3" /> Timeout {role}
-      </Button>
+  // Warn + timeout controls for one side of the report (reported user or reporter)
+  const userControls = (userId: string, username: string | null, role: "reported user" | "reporter", until: string | null) => {
+    const defaultReason = role === "reporter" ? "Abusive or false report" : r.reason;
+    const open = (kind: ModerationTarget["kind"]) =>
+      setModTarget({ userId, username, kind, role, reportId: r.id, defaultReason });
+    return (
+      <>
+        <Button size="sm" variant="outline" onClick={() => open("warning")} disabled={saving} className="gap-1">
+          <AlertTriangle className="h-3 w-3" /> Warn {role}
+        </Button>
+        {until ? (
+          <Button size="sm" variant="outline" onClick={() => removeTimeout(userId, username)} disabled={saving} className="gap-1">
+            <Clock className="h-3 w-3" /> Remove {role} timeout (until {formatUntil(until)})
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" onClick={() => open("timeout")} disabled={saving} className="gap-1 text-destructive">
+            <Clock className="h-3 w-3" /> Timeout {role}
+          </Button>
+        )}
+      </>
     );
+  };
 
   return (
     <div className="border border-border rounded-lg bg-card">
@@ -362,19 +276,17 @@ const ReportCard = ({ report: r, onUpdate, onReload }: ReportCardProps) => {
             </div>
           )}
 
-          {/* Timeouts for either side of the report */}
+          {/* Warnings / timeouts for either side of the report */}
+          {r.reported_user_id && (
+            <div className="flex gap-2 flex-wrap">
+              {userControls(r.reported_user_id, r.reported_username, "reported user", r.reported_timeout_until)}
+            </div>
+          )}
           <div className="flex gap-2 flex-wrap">
-            {r.reported_user_id && timeoutControls(r.reported_user_id, r.reported_username, "reported user", r.reported_timeout_until)}
-            {timeoutControls(r.reporter_id, r.reporter_profile?.username ?? null, "reporter", r.reporter_timeout_until)}
+            {userControls(r.reporter_id, r.reporter_profile?.username ?? null, "reporter", r.reporter_timeout_until)}
           </div>
 
-          <TimeoutDialog
-            target={timeoutTarget}
-            reportId={r.id}
-            defaultReason={r.reason}
-            onClose={() => setTimeoutTarget(null)}
-            onDone={onReload}
-          />
+          <ModerationActionDialog target={modTarget} onClose={() => setModTarget(null)} onDone={onReload} />
 
           {/* Report workflow */}
           <div className="flex gap-2 flex-wrap">
