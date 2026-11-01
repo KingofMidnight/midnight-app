@@ -792,6 +792,59 @@ export type Database = {
           },
         ]
       }
+      user_moderation_actions: {
+        Row: {
+          acknowledged_at: string | null
+          action_type: Database["public"]["Enums"]["moderation_action_type"]
+          created_at: string
+          expires_at: string | null
+          id: string
+          issued_by: string | null
+          message: string | null
+          reason: string
+          report_id: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          user_id: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          action_type: Database["public"]["Enums"]["moderation_action_type"]
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          issued_by?: string | null
+          message?: string | null
+          reason: string
+          report_id?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          user_id: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          action_type?: Database["public"]["Enums"]["moderation_action_type"]
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          issued_by?: string | null
+          message?: string | null
+          reason?: string
+          report_id?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_moderation_actions_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_progress: {
         Row: {
           id: string
@@ -917,6 +970,7 @@ export type Database = {
       }
     }
     Functions: {
+      active_timeout_until: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -941,6 +995,7 @@ export type Database = {
       content_origin: "original" | "fanfiction"
       content_rating: "safe" | "suggestive" | "mature" | "explicit"
       list_type: "reading" | "completed" | "plan_to_read"
+      moderation_action_type: "warning" | "timeout"
       relationship_type:
         | "adapts"
         | "sequel"
@@ -1088,6 +1143,7 @@ export const Constants = {
       content_origin: ["original", "fanfiction"],
       content_rating: ["safe", "suggestive", "mature", "explicit"],
       list_type: ["reading", "completed", "plan_to_read"],
+      moderation_action_type: ["warning", "timeout"],
       relationship_type: [
         "adapts",
         "sequel",

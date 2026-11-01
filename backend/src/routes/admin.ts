@@ -42,6 +42,17 @@ const ResolveReportSchema = z.object({
   admin_notes: z.string().trim().max(2000).optional(),
 });
 
+const TIMEOUT_PRESETS = { "1h": 1, "24h": 24, "3d": 72, "7d": 168, "30d": 720 } as const;
+
+const TimeoutSchema = z.object({
+  duration: z.enum(Object.keys(TIMEOUT_PRESETS) as [keyof typeof TIMEOUT_PRESETS, ...(keyof typeof TIMEOUT_PRESETS)[]], {
+    errorMap: () => ({ message: `duration must be one of: ${Object.keys(TIMEOUT_PRESETS).join(", ")}.` }),
+  }),
+  reason: z.string().trim().min(1, "reason is required.").max(500),
+  message: z.string().trim().max(2000).optional(),
+  reportId: z.string().uuid().optional(),
+});
+
 const BanSchema = z.object({
   reason: z.string().trim().min(1, "reason is required.").max(500),
   notes: z.string().max(2000).optional(),
@@ -145,6 +156,85 @@ router.patch(
     if (error) throw error;
     if (!data) throw createError("Report not found.", 404);
     sendData(res, data);
+  })
+);
+
+// Timeout: the user can still sign in and read, but can't post or edit
+// (comments, reviews, reports, ratings, stories, chapters, episodes) until it expires.
+router.post(
+  "/users/:userId/timeout",
+  asyncHandler(async (req, res) => {
+    const userId = uuidParam(req, "userId");
+    const { duration, reason, message, reportId } = parse(TimeoutSchema, req.body);
+
+    if (userId === req.user!.id) throw createError("You cannot time yourself out.", 400);
+    const roles = await getUserRoles(userId);
+    if (roles.includes("admin") || roles.includes("moderator")) {
+      throw createError("Admins and moderators cannot be timed out.", 403);
+    }
+
+    const { data: target, error: userErr } = await supabaseAdmin.auth.admin.getUserById(userId);
+    if (userErr || !target?.user) throw createError("User not found.", 404);
+
+    const expiresAt = new Date(Date.now() + TIMEOUT_PRESETS[duration] * 3_600_000).toISOString();
+
+    const { data, error } = await supabaseAdmin
+      .from("user_moderation_actions")
+      .insert({
+        user_id: userId,
+        action_type: "timeout",
+        reason,
+        message: message ?? null,
+        report_id: reportId ?? null,
+        issued_by: req.user!.id,
+        expires_at: expiresAt,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    sendData(res, data, 201);
+  })
+);
+
+router.delete(
+  "/users/:userId/timeout",
+  asyncHandler(async (req, res) => {
+    const userId = uuidParam(req, "userId");
+
+    const { data, error } = await supabaseAdmin
+      .from("user_moderation_actions")
+      .update({ revoked_at: new Date().toISOString(), revoked_by: req.user!.id })
+      .eq("user_id", userId)
+      .eq("action_type", "timeout")
+      .is("revoked_at", null)
+      .gt("expires_at", new Date().toISOString())
+      .select("id");
+
+    if (error) throw error;
+    sendData(res, { revoked: data?.length ?? 0 });
+  })
+);
+
+// Full moderation history for a user (timeouts now; warnings later)
+router.get(
+  "/users/:userId/moderation",
+  asyncHandler(async (req, res) => {
+    const userId = uuidParam(req, "userId");
+
+    const { data, error } = await supabaseAdmin
+      .from("user_moderation_actions")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    const now = Date.now();
+    const activeTimeout = (data ?? []).find(
+      (a) => a.action_type === "timeout" && !a.revoked_at && a.expires_at && new Date(a.expires_at).getTime() > now
+    );
+    sendData(res, { actions: data ?? [], timedOutUntil: activeTimeout?.expires_at ?? null });
   })
 );
 

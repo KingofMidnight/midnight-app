@@ -254,7 +254,7 @@ const CreatorDashboard = () => {
     setShowFullEditor(true);
   };
 
-  const handleSave = async (targetStatus?: "draft" | "pending") => {
+  const handleSave = async (targetStatus?: "draft" | "approved") => {
     const origin = form.content_origin === "unset" ? null : form.content_origin;
     const payload: any = {
       title: form.title,
@@ -273,8 +273,8 @@ const CreatorDashboard = () => {
 
     const successMessage = targetStatus === "draft"
       ? "Saved as draft"
-      : targetStatus === "pending"
-        ? "Submitted for review"
+      : targetStatus === "approved"
+        ? "Story published"
         : "Story updated";
 
     if (editing) {
@@ -285,7 +285,7 @@ const CreatorDashboard = () => {
       payload.review_status = targetStatus ?? "draft";
       const { error } = await supabase.from("stories").insert(payload);
       if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
-      toast({ title: payload.review_status === "pending" ? "Story created & sent for review" : "Story saved as draft" });
+      toast({ title: payload.review_status === "approved" ? "Story published" : "Story saved as draft" });
     }
     resetForm();
     loadStories();
@@ -330,7 +330,7 @@ const CreatorDashboard = () => {
       draft:    { label: "Draft",          variant: "outline" },
       pending:  { label: "Pending Review", variant: "secondary" },
       approved: { label: "Approved",       variant: "default" },
-      rejected: { label: "Rejected",       variant: "destructive" },
+      rejected: { label: "Taken down",     variant: "destructive" },
       archived: { label: "Archived",       variant: "outline" },
     };
     const s = map[status] || map.pending;
@@ -339,7 +339,22 @@ const CreatorDashboard = () => {
 
   const renderPublishActions = (className = "") => {
     const currentStatus = editing?.review_status ?? "draft";
-    const isUnpublished = !editing || currentStatus === "draft" || currentStatus === "rejected";
+    // Stories go live immediately; they are reviewed when users flag them.
+    // A story a moderator took down ("rejected") stays down until an admin restores it.
+    const takenDown = currentStatus === "rejected";
+    const isUnpublished = !editing || ["draft", "pending", "archived"].includes(currentStatus);
+    if (takenDown) {
+      return (
+        <div className={`space-y-2 ${className}`}>
+          <Button onClick={() => handleSave()} className="gap-1.5">
+            <Save className="h-4 w-4" /> Save Changes
+          </Button>
+          <p className="text-xs text-destructive">
+            This story was taken down by a moderator after a report. You can still edit it, but only an admin can make it public again.
+          </p>
+        </div>
+      );
+    }
     return (
       <div className={`flex flex-wrap gap-2 ${className}`}>
         {isUnpublished && (
@@ -347,9 +362,9 @@ const CreatorDashboard = () => {
             <FileText className="h-4 w-4" /> Save as Draft
           </Button>
         )}
-        <Button onClick={() => handleSave(isUnpublished ? "pending" : undefined)} className="gap-1.5">
+        <Button onClick={() => handleSave(isUnpublished ? "approved" : undefined)} className="gap-1.5">
           {isUnpublished ? <Send className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-          {isUnpublished ? "Submit for Review" : "Save Changes"}
+          {isUnpublished ? "Publish" : "Save Changes"}
         </Button>
         {!isUnpublished && (
           <Button variant="outline" onClick={() => handleSave("draft")} className="gap-1.5">

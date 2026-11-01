@@ -10,6 +10,8 @@ interface PendingResult {
 
 type ApiResponse<T = unknown> = { success: boolean; data?: T; error?: string } & Record<string, unknown>;
 
+export type TimeoutDuration = "1h" | "24h" | "3d" | "7d" | "30d";
+
 interface TwoFactorSetup {
   secret: string;
   manualEntryKey: string;
@@ -119,6 +121,13 @@ export const api = {
     },
 
     deleteUser: (userId: string) => apiDelete(`/api/admin/users/${userId}`),
+
+    timeoutUser: (
+      userId: string,
+      body: { duration: TimeoutDuration; reason: string; message?: string; reportId?: string }
+    ) => apiPost<{ id: string; expires_at: string }>(`/api/admin/users/${userId}/timeout`, body),
+
+    removeTimeout: (userId: string) => apiDelete(`/api/admin/users/${userId}/timeout`),
   },
 
   reviews: {

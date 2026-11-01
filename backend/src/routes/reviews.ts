@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { supabaseAdmin } from "../config/supabase.js";
 import { createError } from "../middleware/errorHandler.js";
 import { asyncHandler, parse, uuidParam, PaginationSchema, sendData } from "../utils/http.js";
+import { assertNotTimedOut } from "../utils/moderation.js";
 
 const router = Router();
 
@@ -39,6 +40,7 @@ router.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const { storyId, title, content, rating } = parse(CreateReviewSchema, req.body);
+    await assertNotTimedOut(req.user!.id);
 
     const { data: existing, error: lookupErr } = await supabaseAdmin
       .from("reviews")
@@ -87,6 +89,7 @@ router.patch(
     const reviewId = uuidParam(req, "reviewId");
     const updates = parse(UpdateReviewSchema, req.body);
     await ensureOwner(reviewId, req.user!.id);
+    await assertNotTimedOut(req.user!.id);
 
     const { data, error } = await supabaseAdmin
       .from("reviews")

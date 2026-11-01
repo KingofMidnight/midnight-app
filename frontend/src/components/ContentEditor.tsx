@@ -140,7 +140,6 @@ const ContentEditor = ({ storyId, storyType, isCreatorMode = false, isCyoa = fal
   const [title, setTitle] = useState("");
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [content, setContent] = useState("");
-  const [draftStatus, setDraftStatus] = useState<DraftStatus>("draft");
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [choices, setChoices] = useState<ChapterChoice[]>([]);
@@ -244,7 +243,6 @@ const ContentEditor = ({ storyId, storyType, isCreatorMode = false, isCyoa = fal
     setTitle("");
     setImageUrls([]);
     setContent("");
-    setDraftStatus("draft");
   };
 
   const startEdit = (ch: Chapter) => {
@@ -253,8 +251,14 @@ const ContentEditor = ({ storyId, storyType, isCreatorMode = false, isCyoa = fal
     setTitle(ch.title);
     setImageUrls(ch.image_urls ?? []);
     setContent(ch.content ?? "");
-    setDraftStatus(ch.review_status === "approved" ? "approved" : "draft");
   };
+
+  // Chapters go live immediately (content is reviewed when users flag it).
+  // Editing an approved chapter keeps it live; a chapter an admin took down
+  // ("rejected") stays down — the database ignores status changes on it.
+  const editingApproved = editing?.review_status === "approved";
+  const editingTakenDown = isCreatorMode && editing?.review_status === "rejected";
+  const publishLabel = editingApproved ? "Save Changes" : editing ? "Publish" : "Publish Now";
 
   const handleAddChoice = async () => {
     if (!editing || !newChoiceLabel.trim() || !newChoiceTarget) return;
@@ -276,12 +280,11 @@ const ContentEditor = ({ storyId, storyType, isCreatorMode = false, isCyoa = fal
     loadChoices(editing.id);
   };
 
-  const handleSave = async (overrideStatus?: DraftStatus) => {
+  const handleSave = async (statusToSave: DraftStatus) => {
     if (!title.trim()) {
       toast({ title: "Title required", variant: "destructive" });
       return;
     }
-    const statusToSave = overrideStatus ?? draftStatus;
     const rawContent = isManga || isAnime ? null : content;
     const sanitizedContent = rawContent ? sanitizeAdminContent(rawContent) : null;
 
@@ -300,15 +303,20 @@ const ContentEditor = ({ storyId, storyType, isCreatorMode = false, isCyoa = fal
       review_status: statusToSave,
     };
 
+    const savedMessage =
+      editingTakenDown ? "Changes saved (chapter is still taken down)"
+        : statusToSave === "draft" ? "Saved as draft"
+          : editingApproved ? "Changes saved"
+            : "Chapter published";
+
     if (editing) {
       const { error } = await supabase.from("chapters").update(payload).eq("id", editing.id);
       if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
-      toast({ title: statusToSave === "draft" ? "Saved as draft" : "Chapter published" });
     } else {
       const { error } = await supabase.from("chapters").insert(payload);
       if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
-      toast({ title: statusToSave === "draft" ? "Draft saved" : "Chapter created and published" });
     }
+    toast({ title: savedMessage });
     resetForm();
     loadChapters();
   };
@@ -412,16 +420,21 @@ const ContentEditor = ({ storyId, storyType, isCreatorMode = false, isCyoa = fal
               className="gap-1.5"
             >
               <FileText className="h-4 w-4" />
-              {editing ? "Save as Draft" : "Save Draft"}
+              {editingApproved ? "Unpublish (Save as Draft)" : editing ? "Save as Draft" : "Save Draft"}
             </Button>
             <Button
               onClick={() => handleSave("approved")}
               className="gap-1.5"
             >
               <Globe className="h-4 w-4" />
-              {editing ? "Publish" : "Publish Now"}
+              {publishLabel}
             </Button>
           </div>
+          {editingTakenDown && (
+            <p className="text-xs text-destructive">
+              This chapter was taken down by a moderator after a report. You can still edit it, but only an admin can make it public again.
+            </p>
+          )}
 
           {isCyoa && (
             <div className="border-t border-border pt-4 space-y-3">
@@ -516,7 +529,7 @@ const ContentEditor = ({ storyId, storyType, isCreatorMode = false, isCyoa = fal
                 <Badge variant="secondary" className="text-xs">Pending</Badge>
               )}
               {ch.review_status === "rejected" && (
-                <Badge variant="destructive" className="text-xs">Rejected</Badge>
+                <Badge variant="destructive" className="text-xs">Taken down</Badge>
               )}
             </div>
             <div className="flex gap-1">

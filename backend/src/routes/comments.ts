@@ -7,6 +7,7 @@ import { createError } from "../middleware/errorHandler.js";
 import { getBlockRelatedUsers } from "../utils/userBlocks.js";
 import { sanitizeCommentHtml, validateTextContent } from "../utils/validation.js";
 import { asyncHandler, parse, uuidParam, sendData } from "../utils/http.js";
+import { assertNotTimedOut } from "../utils/moderation.js";
 
 const router = Router();
 
@@ -89,6 +90,7 @@ router.post(
   asyncHandler(async (req, res) => {
     const { storyId, content, parentCommentId } = parse(CreateCommentSchema, req.body);
     const html = prepareContent(content);
+    await assertNotTimedOut(req.user!.id);
 
     if (parentCommentId) {
       const { data: parent, error: parentErr } = await supabaseAdmin
@@ -144,6 +146,7 @@ router.patch(
     const commentId = uuidParam(req, "commentId");
     const html = prepareContent(parse(UpdateCommentSchema, req.body).content);
     await ensureOwner(commentId, req.user!.id);
+    await assertNotTimedOut(req.user!.id);
 
     const { data, error } = await supabaseAdmin
       .from("comments")

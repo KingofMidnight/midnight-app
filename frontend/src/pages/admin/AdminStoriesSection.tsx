@@ -149,16 +149,15 @@ const AdminStoriesSection = () => {
       genres: form.genres,
       tags: form.tags,
       cover_image_url: form.cover_image_url || null,
-      created_by: user.id,
-      review_status: "approved",
     };
 
+    // Editing must not take over the story (created_by) or change its review status
     if (editing) {
       const { error } = await supabase.from("stories").update(payload).eq("id", editing.id);
       if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
       toast({ title: "Story updated" });
     } else {
-      const { error } = await supabase.from("stories").insert(payload);
+      const { error } = await supabase.from("stories").insert({ ...payload, created_by: user.id, review_status: "approved" });
       if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
       toast({ title: "Story created" });
     }

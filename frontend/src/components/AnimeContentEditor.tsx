@@ -57,17 +57,18 @@ const AnimeContentEditor = ({ storyId, isCreatorMode = false }: Props) => {
       embed_url: embedUrl || null,
       thumbnail_url: thumbnailUrl || null,
       duration_minutes: duration ? Number(duration) : null,
-      review_status: "approved",
     };
 
+    // Edits keep the episode's current review status; new episodes go live immediately
     if (editing) {
       const { error } = await supabase.from("episodes").update(payload).eq("id", editing.id);
       if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
       toast({ title: "Episode updated" });
     } else {
+      payload.review_status = "approved";
       const { error } = await supabase.from("episodes").insert(payload);
       if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
-      toast({ title: "Episode created" });
+      toast({ title: "Episode published" });
     }
     resetForm();
     loadEpisodes();
