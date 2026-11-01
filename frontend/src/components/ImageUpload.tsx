@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Upload, X, Loader2, Image as ImageIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { IMAGE_ACCEPT, checkImageFile, imageExtension } from "@/lib/uploads";
+import { IMAGE_ACCEPT, validateImageUpload, imageExtension } from "@/lib/uploads";
 
 interface ImageUploadProps {
   bucket: string;
@@ -21,7 +21,7 @@ const ImageUpload = ({ bucket, folder = "", value, onChange, label = "Image", ac
   const inputRef = useRef<HTMLInputElement>(null);
 
   const upload = async (file: File) => {
-    const problem = checkImageFile(file, bucket);
+    const problem = await validateImageUpload(file, bucket);
     if (problem) {
       toast({ title: "Can't upload this file", description: problem, variant: "destructive" });
       return;

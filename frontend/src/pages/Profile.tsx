@@ -2,7 +2,7 @@
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { api } from "@/lib/api";
-import { checkImageFile, imageExtension } from "@/lib/uploads";
+import { validateImageUpload, imageExtension } from "@/lib/uploads";
 import { Link, Navigate } from "react-router-dom";
 import { User, BookOpen, Star, CheckCircle, Bookmark, Settings, Eye, EyeOff, Camera, Shield, Archive, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -115,7 +115,7 @@ const Profile = () => {
 
   const handleAvatarUpload = async (file: File) => {
     if (!user) return;
-    const problem = checkImageFile(file, "covers");
+    const problem = await validateImageUpload(file, "covers");
     if (problem) {
       toast({ title: "Can't upload this file", description: problem, variant: "destructive" });
       return;
